@@ -150,8 +150,8 @@ struct hotkey
 static void msg_queue_dump( struct object *obj, int verbose );
 static int msg_queue_add_queue( struct object *obj, struct wait_queue_entry *entry );
 static void msg_queue_remove_queue( struct object *obj, struct wait_queue_entry *entry );
-static int msg_queue_signaled( struct object *obj, struct thread *thread );
-static int msg_queue_satisfied( struct object *obj, struct thread *thread );
+static int msg_queue_signaled( struct object *obj, struct wait_queue_entry *entry );
+static void msg_queue_satisfied( struct object *obj, struct wait_queue_entry *entry );
 static void msg_queue_destroy( struct object *obj );
 static void msg_queue_poll_event( struct fd *fd, int event );
 static void thread_input_dump( struct object *obj, int verbose );
@@ -866,7 +866,7 @@ static int is_queue_hung( struct msg_queue *queue )
 
     LIST_FOR_EACH_ENTRY( entry, &queue->obj.wait_queue, struct wait_queue_entry, entry )
     {
-        if (entry->thread->queue == queue)
+        if (get_wait_queue_thread(entry)->queue == queue)
             return 0;  /* thread is waiting on queue -> not hung */
     }
     return 1;
@@ -875,10 +875,10 @@ static int is_queue_hung( struct msg_queue *queue )
 static int msg_queue_add_queue( struct object *obj, struct wait_queue_entry *entry )
 {
     struct msg_queue *queue = (struct msg_queue *)obj;
-    struct process *process = entry->thread->process;
+    struct process *process = get_wait_queue_thread(entry)->process;
 
     /* a thread can only wait on its own queue */
-    if (entry->thread->queue != queue)
+    if (get_wait_queue_thread(entry)->queue != queue)
     {
         set_error( STATUS_ACCESS_DENIED );
         return 0;
@@ -907,7 +907,7 @@ static void msg_queue_dump( struct object *obj, int verbose )
              queue->wake_bits, queue->wake_mask );
 }
 
-static int msg_queue_signaled( struct object *obj, struct thread *thread )
+static int msg_queue_signaled( struct object *obj, struct wait_queue_entry *entry )
 {
     struct msg_queue *queue = (struct msg_queue *)obj;
     int ret = 0;
@@ -924,12 +924,11 @@ static int msg_queue_signaled( struct object *obj, struct thread *thread )
     return ret || is_signaled( queue );
 }
 
-static int msg_queue_satisfied( struct object *obj, struct thread *thread )
+static void msg_queue_satisfied( struct object *obj, struct wait_queue_entry *entry )
 {
     struct msg_queue *queue = (struct msg_queue *)obj;
     queue->wake_mask = 0;
     queue->changed_mask = 0;
-    return 0;  /* Not abandoned */
 }
 
 static void msg_queue_destroy( struct object *obj )
@@ -2198,7 +2197,7 @@ DECL_HANDLER(set_queue_mask)
         if (is_signaled( queue ))
         {
             /* if skip wait is set, do what would have been done in the subsequent wait */
-            if (req->skip_wait) msg_queue_satisfied( &queue->obj, current );
+            if (req->skip_wait) queue->wake_mask = queue->changed_mask = 0;
             else wake_up( &queue->obj, 0 );
         }
     }

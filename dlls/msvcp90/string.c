@@ -162,7 +162,7 @@ char CDECL MSVCP_char_traits_char_to_char_type(const int *i)
 /* ?to_int_type@?$char_traits@D@std@@SAHAEBD@Z */
 int CDECL MSVCP_char_traits_char_to_int_type(const char *ch)
 {
-    return (int)*ch;
+    return (unsigned char)*ch;
 }
 
 /* ?eq_int_type@?$char_traits@D@std@@SA_NABH0@Z */
@@ -1823,7 +1823,7 @@ MSVCP_size_t __thiscall MSVCP_basic_string_char_find_last_not_of_cstr_substr(
 
     TRACE("%p %p %lu %lu\n", this, find, off, len);
 
-    if(len>0 && this->size>0) {
+    if(this->size>0) {
         if(off >= this->size)
             off = this->size-1;
 
@@ -3841,7 +3841,7 @@ MSVCP_size_t __thiscall MSVCP_basic_string_wchar_find_last_not_of_cstr_substr(
 
     TRACE("%p %p %lu %lu\n", this, find, off, len);
 
-    if(len>0 && this->size>0) {
+    if(this->size>0) {
         if(off >= this->size)
             off = this->size-1;
 

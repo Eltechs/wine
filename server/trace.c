@@ -66,6 +66,19 @@ static void dump_uints( const int *ptr, int len )
     fputc( '}', stderr );
 }
 
+static void dump_handles( const char *prefix, const obj_handle_t *data, data_size_t size )
+{
+    data_size_t len = size / sizeof(*data);
+
+    fprintf( stderr,"%s{", prefix );
+    while (len > 0)
+    {
+        fprintf( stderr, "%04x", *data++ );
+        if (--len) fputc( ',', stderr );
+    }
+    fputc( '}', stderr );
+}
+
 static void dump_timeout( const char *prefix, const timeout_t *time )
 {
     fprintf( stderr, "%s%s", prefix, get_timeout_str(*time) );
@@ -367,16 +380,45 @@ static void dump_varargs_apc_result( const char *prefix, data_size_t size )
     remove_data( size );
 }
 
-static void dump_varargs_handles( const char *prefix, data_size_t size )
+static void dump_varargs_select_op( const char *prefix, data_size_t size )
 {
-    const obj_handle_t *data = cur_data;
-    data_size_t len = size / sizeof(*data);
+    select_op_t data;
 
-    fprintf( stderr,"%s{", prefix );
-    while (len > 0)
+    if (!size)
     {
-        fprintf( stderr, "%04x", *data++ );
-        if (--len) fputc( ',', stderr );
+        fprintf( stderr, "%s{}", prefix );
+        return;
+    }
+    memset( &data, 0, sizeof(data) );
+    memcpy( &data, cur_data, min( size, sizeof(data) ));
+
+    fprintf( stderr, "%s{", prefix );
+    switch (data.op)
+    {
+    case SELECT_NONE:
+        fprintf( stderr, "NONE" );
+        break;
+    case SELECT_WAIT:
+    case SELECT_WAIT_ALL:
+        fprintf( stderr, "%s", data.op == SELECT_WAIT ? "WAIT" : "WAIT_ALL" );
+        if (size > offsetof( select_op_t, wait.handles ))
+            dump_handles( ",handles=", data.wait.handles,
+                          min( size, sizeof(data.wait) ) - offsetof( select_op_t, wait.handles ));
+        break;
+    case SELECT_SIGNAL_AND_WAIT:
+        fprintf( stderr, "SIGNAL_AND_WAIT,signal=%04x,wait=%04x",
+                 data.signal_and_wait.signal, data.signal_and_wait.wait );
+        break;
+    case SELECT_KEYED_EVENT_WAIT:
+    case SELECT_KEYED_EVENT_RELEASE:
+        fprintf( stderr, "KEYED_EVENT_%s,handle=%04x",
+                 data.op == SELECT_KEYED_EVENT_WAIT ? "WAIT" : "RELEASE",
+                 data.keyed_event.handle );
+        dump_uint64( ",key=", &data.keyed_event.key );
+        break;
+    default:
+        fprintf( stderr, "op=%u", data.op );
+        break;
     }
     fputc( '}', stderr );
     remove_data( size );
@@ -1357,11 +1399,10 @@ static void dump_select_request( const struct select_request *req )
 {
     fprintf( stderr, " flags=%d", req->flags );
     dump_uint64( ", cookie=", &req->cookie );
-    fprintf( stderr, ", signal=%04x", req->signal );
-    fprintf( stderr, ", prev_apc=%04x", req->prev_apc );
     dump_timeout( ", timeout=", &req->timeout );
+    fprintf( stderr, ", prev_apc=%04x", req->prev_apc );
     dump_varargs_apc_result( ", result=", cur_size );
-    dump_varargs_handles( ", handles=", cur_size );
+    dump_varargs_select_op( ", data=", cur_size );
 }
 
 static void dump_select_reply( const struct select_reply *req )
@@ -1391,6 +1432,17 @@ static void dump_event_op_request( const struct event_op_request *req )
     fprintf( stderr, ", op=%d", req->op );
 }
 
+static void dump_query_event_request( const struct query_event_request *req )
+{
+    fprintf( stderr, " handle=%04x", req->handle );
+}
+
+static void dump_query_event_reply( const struct query_event_reply *req )
+{
+    fprintf( stderr, " manual_reset=%d", req->manual_reset );
+    fprintf( stderr, ", state=%d", req->state );
+}
+
 static void dump_open_event_request( const struct open_event_request *req )
 {
     fprintf( stderr, " access=%08x", req->access );
@@ -1400,6 +1452,31 @@ static void dump_open_event_request( const struct open_event_request *req )
 }
 
 static void dump_open_event_reply( const struct open_event_reply *req )
+{
+    fprintf( stderr, " handle=%04x", req->handle );
+}
+
+static void dump_create_keyed_event_request( const struct create_keyed_event_request *req )
+{
+    fprintf( stderr, " access=%08x", req->access );
+    fprintf( stderr, ", attributes=%08x", req->attributes );
+    dump_varargs_object_attributes( ", objattr=", cur_size );
+}
+
+static void dump_create_keyed_event_reply( const struct create_keyed_event_reply *req )
+{
+    fprintf( stderr, " handle=%04x", req->handle );
+}
+
+static void dump_open_keyed_event_request( const struct open_keyed_event_request *req )
+{
+    fprintf( stderr, " access=%08x", req->access );
+    fprintf( stderr, ", attributes=%08x", req->attributes );
+    fprintf( stderr, ", rootdir=%04x", req->rootdir );
+    dump_varargs_unicode_str( ", name=", cur_size );
+}
+
+static void dump_open_keyed_event_reply( const struct open_keyed_event_reply *req )
 {
     fprintf( stderr, " handle=%04x", req->handle );
 }
@@ -3861,7 +3938,7 @@ static void dump_add_completion_request( const struct add_completion_request *re
     fprintf( stderr, " handle=%04x", req->handle );
     dump_uint64( ", ckey=", &req->ckey );
     dump_uint64( ", cvalue=", &req->cvalue );
-    fprintf( stderr, ", information=%08x", req->information );
+    dump_uint64( ", information=", &req->information );
     fprintf( stderr, ", status=%08x", req->status );
 }
 
@@ -3874,7 +3951,7 @@ static void dump_remove_completion_reply( const struct remove_completion_reply *
 {
     dump_uint64( " ckey=", &req->ckey );
     dump_uint64( ", cvalue=", &req->cvalue );
-    fprintf( stderr, ", information=%08x", req->information );
+    dump_uint64( ", information=", &req->information );
     fprintf( stderr, ", status=%08x", req->status );
 }
 
@@ -3899,8 +3976,8 @@ static void dump_add_fd_completion_request( const struct add_fd_completion_reque
 {
     fprintf( stderr, " handle=%04x", req->handle );
     dump_uint64( ", cvalue=", &req->cvalue );
+    dump_uint64( ", information=", &req->information );
     fprintf( stderr, ", status=%08x", req->status );
-    fprintf( stderr, ", information=%08x", req->information );
 }
 
 static void dump_get_window_layered_info_request( const struct get_window_layered_info_request *req )
@@ -4007,7 +4084,10 @@ static const dump_func req_dumpers[REQ_NB_REQUESTS] = {
     (dump_func)dump_select_request,
     (dump_func)dump_create_event_request,
     (dump_func)dump_event_op_request,
+    (dump_func)dump_query_event_request,
     (dump_func)dump_open_event_request,
+    (dump_func)dump_create_keyed_event_request,
+    (dump_func)dump_open_keyed_event_request,
     (dump_func)dump_create_mutex_request,
     (dump_func)dump_release_mutex_request,
     (dump_func)dump_open_mutex_request,
@@ -4259,7 +4339,10 @@ static const dump_func reply_dumpers[REQ_NB_REQUESTS] = {
     (dump_func)dump_select_reply,
     (dump_func)dump_create_event_reply,
     NULL,
+    (dump_func)dump_query_event_reply,
     (dump_func)dump_open_event_reply,
+    (dump_func)dump_create_keyed_event_reply,
+    (dump_func)dump_open_keyed_event_reply,
     (dump_func)dump_create_mutex_reply,
     (dump_func)dump_release_mutex_reply,
     (dump_func)dump_open_mutex_reply,
@@ -4511,7 +4594,10 @@ static const char * const req_names[REQ_NB_REQUESTS] = {
     "select",
     "create_event",
     "event_op",
+    "query_event",
     "open_event",
+    "create_keyed_event",
+    "open_keyed_event",
     "create_mutex",
     "release_mutex",
     "open_mutex",

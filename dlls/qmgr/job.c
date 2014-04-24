@@ -25,8 +25,31 @@
 
 #include "qmgr.h"
 #include "wine/debug.h"
+#include "wine/unicode.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(qmgr);
+
+static inline BOOL is_job_done(const BackgroundCopyJobImpl *job)
+{
+    return job->state == BG_JOB_STATE_CANCELLED || job->state == BG_JOB_STATE_ACKNOWLEDGED;
+}
+
+static HRESULT return_strval(const WCHAR *str, WCHAR **ret)
+{
+    int len;
+
+    if (!ret) return E_INVALIDARG;
+
+    len = strlenW(str);
+    *ret = CoTaskMemAlloc((len+1)*sizeof(WCHAR));
+    if (!*ret) return E_OUTOFMEMORY;
+
+    if (len)
+        strcpyW(*ret, str);
+    else
+        **ret = 0;
+    return S_OK;
+}
 
 static inline BackgroundCopyJobImpl *impl_from_IBackgroundCopyJob2(IBackgroundCopyJob2 *iface)
 {
@@ -73,6 +96,7 @@ static ULONG WINAPI BITS_IBackgroundCopyJob_Release(IBackgroundCopyJob2 *iface)
         This->cs.DebugInfo->Spare[0] = 0;
         DeleteCriticalSection(&This->cs);
         HeapFree(GetProcessHeap(), 0, This->displayName);
+        HeapFree(GetProcessHeap(), 0, This->description);
         HeapFree(GetProcessHeap(), 0, This);
     }
 
@@ -147,8 +171,7 @@ static HRESULT WINAPI BITS_IBackgroundCopyJob_Resume(
     HRESULT rv = S_OK;
 
     EnterCriticalSection(&globalMgr.cs);
-    if (This->state == BG_JOB_STATE_CANCELLED
-        || This->state == BG_JOB_STATE_ACKNOWLEDGED)
+    if (is_job_done(This))
     {
         rv = BG_E_INVALID_STATE;
     }
@@ -182,8 +205,7 @@ static HRESULT WINAPI BITS_IBackgroundCopyJob_Complete(
 
     EnterCriticalSection(&This->cs);
 
-    if (This->state == BG_JOB_STATE_CANCELLED
-        || This->state == BG_JOB_STATE_ACKNOWLEDGED)
+    if (is_job_done(This))
     {
         rv = BG_E_INVALID_STATE;
     }
@@ -308,33 +330,57 @@ static HRESULT WINAPI BITS_IBackgroundCopyJob_GetDisplayName(
     LPWSTR *pVal)
 {
     BackgroundCopyJobImpl *This = impl_from_IBackgroundCopyJob2(iface);
-    int n;
 
-    if (!pVal)
-        return E_INVALIDARG;
+    TRACE("(%p)->(%p)\n", This, pVal);
 
-    n = (lstrlenW(This->displayName) + 1) * sizeof **pVal;
-    *pVal = CoTaskMemAlloc(n);
-    if (*pVal == NULL)
-        return E_OUTOFMEMORY;
-    memcpy(*pVal, This->displayName, n);
-    return S_OK;
+    return return_strval(This->displayName, pVal);
 }
 
 static HRESULT WINAPI BITS_IBackgroundCopyJob_SetDescription(
     IBackgroundCopyJob2 *iface,
     LPCWSTR Val)
 {
-    FIXME("Not implemented\n");
-    return E_NOTIMPL;
+    BackgroundCopyJobImpl *This = impl_from_IBackgroundCopyJob2(iface);
+    static const int max_description_len = 1024;
+    HRESULT hr = S_OK;
+    int len;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(Val));
+
+    if (!Val) return E_INVALIDARG;
+
+    len = strlenW(Val);
+    if (len > max_description_len) return BG_E_STRING_TOO_LONG;
+
+    EnterCriticalSection(&This->cs);
+
+    if (is_job_done(This))
+    {
+        hr = BG_E_INVALID_STATE;
+    }
+    else
+    {
+        HeapFree(GetProcessHeap(), 0, This->description);
+        if ((This->description = HeapAlloc(GetProcessHeap(), 0, (len+1)*sizeof(WCHAR))))
+            strcpyW(This->description, Val);
+        else
+            hr = E_OUTOFMEMORY;
+    }
+
+    LeaveCriticalSection(&This->cs);
+
+    return hr;
 }
 
 static HRESULT WINAPI BITS_IBackgroundCopyJob_GetDescription(
     IBackgroundCopyJob2 *iface,
     LPWSTR *pVal)
 {
-    FIXME("Not implemented\n");
-    return E_NOTIMPL;
+    BackgroundCopyJobImpl *This = impl_from_IBackgroundCopyJob2(iface);
+
+    TRACE("(%p)->(%p)\n", This, pVal);
+
+    return return_strval(This->description, pVal);
 }
 
 static HRESULT WINAPI BITS_IBackgroundCopyJob_SetPriority(
@@ -588,7 +634,7 @@ HRESULT BackgroundCopyJobConstructor(LPCWSTR displayName, BG_JOB_TYPE type, GUID
     This->ref = 1;
     This->type = type;
 
-    n = (lstrlenW(displayName) + 1) *  sizeof *displayName;
+    n = (strlenW(displayName) + 1) *  sizeof *displayName;
     This->displayName = HeapAlloc(GetProcessHeap(), 0, n);
     if (!This->displayName)
     {
@@ -617,6 +663,7 @@ HRESULT BackgroundCopyJobConstructor(LPCWSTR displayName, BG_JOB_TYPE type, GUID
     This->jobProgress.FilesTransferred = 0;
 
     This->state = BG_JOB_STATE_SUSPENDED;
+    This->description = NULL;
 
     *job = This;
     return S_OK;

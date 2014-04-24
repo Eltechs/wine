@@ -1714,8 +1714,8 @@ void __thiscall basic_string_char_reserve(basic_string_char *this, MSVCP_size_t 
     if(len > size)
         return;
 
-    basic_string_char__Grow(this, size, FALSE);
-    basic_string_char__Eos(this, len);
+    if(basic_string_char__Grow(this, size, FALSE))
+        basic_string_char__Eos(this, len);
 }
 
 /* ?empty@?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QBE_NXZ */
@@ -1809,9 +1809,15 @@ static MSVCP_size_t char_traits_wchar_length(const wchar_t *str)
     return wcslen((WCHAR*)str);
 }
 
-static wchar_t* char_traits_wchar_assignn(wchar_t *str, MSVCP_size_t num, wchar_t c)
+static wchar_t* char_traits_wchar_assignn(wchar_t *str,
+        MSVCP_size_t num, wchar_t c)
 {
-    return memset(str, c, num);
+    MSVCP_size_t i;
+
+    for(i=0; i<num; i++)
+        str[i] = c;
+
+    return str;
 }
 
 static int char_traits_wchar_compare(const wchar_t *s1,
@@ -3429,8 +3435,8 @@ void __thiscall basic_string_wchar_reserve(basic_string_wchar *this, MSVCP_size_
     if(len > size)
         return;
 
-    basic_string_wchar__Grow(this, size, FALSE);
-    basic_string_wchar__Eos(this, len);
+    if(basic_string_wchar__Grow(this, size, FALSE))
+        basic_string_wchar__Eos(this, len);
 }
 
 /* ?empty@?$basic_string@GU?$char_traits@G@std@@V?$allocator@G@2@@std@@QBE_NXZ */

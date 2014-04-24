@@ -45,8 +45,8 @@ struct event
 
 static void event_dump( struct object *obj, int verbose );
 static struct object_type *event_get_type( struct object *obj );
-static int event_signaled( struct object *obj, struct thread *thread );
-static int event_satisfied( struct object *obj, struct thread *thread );
+static int event_signaled( struct object *obj, struct wait_queue_entry *entry );
+static void event_satisfied( struct object *obj, struct wait_queue_entry *entry );
 static unsigned int event_map_access( struct object *obj, unsigned int access );
 static int event_signal( struct object *obj, unsigned int access);
 
@@ -68,6 +68,37 @@ static const struct object_ops event_ops =
     no_open_file,              /* open_file */
     no_close_handle,           /* close_handle */
     no_destroy                 /* destroy */
+};
+
+
+struct keyed_event
+{
+    struct object  obj;             /* object header */
+};
+
+static void keyed_event_dump( struct object *obj, int verbose );
+static struct object_type *keyed_event_get_type( struct object *obj );
+static int keyed_event_signaled( struct object *obj, struct wait_queue_entry *entry );
+static unsigned int keyed_event_map_access( struct object *obj, unsigned int access );
+
+static const struct object_ops keyed_event_ops =
+{
+    sizeof(struct keyed_event),  /* size */
+    keyed_event_dump,            /* dump */
+    keyed_event_get_type,        /* get_type */
+    add_queue,                   /* add_queue */
+    remove_queue,                /* remove_queue */
+    keyed_event_signaled,        /* signaled */
+    no_satisfied,                /* satisfied */
+    no_signal,                   /* signal */
+    no_get_fd,                   /* get_fd */
+    keyed_event_map_access,      /* map_access */
+    default_get_sd,              /* get_sd */
+    default_set_sd,              /* set_sd */
+    no_lookup_name,              /* lookup_name */
+    no_open_file,                /* open_file */
+    no_close_handle,             /* close_handle */
+    no_destroy                   /* destroy */
 };
 
 
@@ -135,20 +166,19 @@ static struct object_type *event_get_type( struct object *obj )
     return get_object_type( &str );
 }
 
-static int event_signaled( struct object *obj, struct thread *thread )
+static int event_signaled( struct object *obj, struct wait_queue_entry *entry )
 {
     struct event *event = (struct event *)obj;
     assert( obj->ops == &event_ops );
     return event->signaled;
 }
 
-static int event_satisfied( struct object *obj, struct thread *thread )
+static void event_satisfied( struct object *obj, struct wait_queue_entry *entry )
 {
     struct event *event = (struct event *)obj;
     assert( obj->ops == &event_ops );
     /* Reset if it's an auto-reset event */
     if (!event->manual_reset) event->signaled = 0;
-    return 0;  /* Not abandoned */
 }
 
 static unsigned int event_map_access( struct object *obj, unsigned int access )
@@ -172,6 +202,83 @@ static int event_signal( struct object *obj, unsigned int access )
     }
     set_event( event );
     return 1;
+}
+
+struct keyed_event *create_keyed_event( struct directory *root, const struct unicode_str *name,
+                                        unsigned int attr, const struct security_descriptor *sd )
+{
+    struct keyed_event *event;
+
+    if ((event = create_named_object_dir( root, name, attr, &keyed_event_ops )))
+    {
+        if (get_error() != STATUS_OBJECT_NAME_EXISTS)
+        {
+            /* initialize it if it didn't already exist */
+            if (sd) default_set_sd( &event->obj, sd, OWNER_SECURITY_INFORMATION|
+                                                     GROUP_SECURITY_INFORMATION|
+                                                     DACL_SECURITY_INFORMATION|
+                                                     SACL_SECURITY_INFORMATION );
+        }
+    }
+    return event;
+}
+
+struct keyed_event *get_keyed_event_obj( struct process *process, obj_handle_t handle, unsigned int access )
+{
+    return (struct keyed_event *)get_handle_obj( process, handle, access, &keyed_event_ops );
+}
+
+static void keyed_event_dump( struct object *obj, int verbose )
+{
+    struct keyed_event *event = (struct keyed_event *)obj;
+    assert( obj->ops == &keyed_event_ops );
+    fprintf( stderr, "Keyed event " );
+    dump_object_name( &event->obj );
+    fputc( '\n', stderr );
+}
+
+static struct object_type *keyed_event_get_type( struct object *obj )
+{
+    static const WCHAR name[] = {'K','e','y','e','d','E','v','e','n','t'};
+    static const struct unicode_str str = { name, sizeof(name) };
+    return get_object_type( &str );
+}
+
+static enum select_op matching_op( enum select_op op )
+{
+    return op ^ (SELECT_KEYED_EVENT_WAIT ^ SELECT_KEYED_EVENT_RELEASE);
+}
+
+static int keyed_event_signaled( struct object *obj, struct wait_queue_entry *entry )
+{
+    struct wait_queue_entry *ptr;
+    struct process *process;
+    enum select_op select_op;
+
+    assert( obj->ops == &keyed_event_ops );
+
+    process = get_wait_queue_thread( entry )->process;
+    select_op = get_wait_queue_select_op( entry );
+    if (select_op != SELECT_KEYED_EVENT_WAIT && select_op != SELECT_KEYED_EVENT_RELEASE) return 1;
+
+    LIST_FOR_EACH_ENTRY( ptr, &obj->wait_queue, struct wait_queue_entry, entry )
+    {
+        if (ptr == entry) continue;
+        if (get_wait_queue_thread( ptr )->process != process) continue;
+        if (get_wait_queue_select_op( ptr ) != matching_op( select_op )) continue;
+        if (get_wait_queue_key( ptr ) != get_wait_queue_key( entry )) continue;
+        if (wake_thread_queue_entry( ptr )) return 1;
+    }
+    return 0;
+}
+
+static unsigned int keyed_event_map_access( struct object *obj, unsigned int access )
+{
+    if (access & GENERIC_READ)    access |= STANDARD_RIGHTS_READ | KEYEDEVENT_WAIT;
+    if (access & GENERIC_WRITE)   access |= STANDARD_RIGHTS_WRITE | KEYEDEVENT_WAKE;
+    if (access & GENERIC_EXECUTE) access |= STANDARD_RIGHTS_EXECUTE;
+    if (access & GENERIC_ALL)     access |= KEYEDEVENT_ALL_ACCESS;
+    return access & ~(GENERIC_READ | GENERIC_WRITE | GENERIC_EXECUTE | GENERIC_ALL);
 }
 
 /* create an event */
@@ -248,4 +355,62 @@ DECL_HANDLER(event_op)
         break;
     }
     release_object( event );
+}
+
+/* return details about the event */
+DECL_HANDLER(query_event)
+{
+    struct event *event;
+
+    if (!(event = get_event_obj( current->process, req->handle, EVENT_QUERY_STATE ))) return;
+
+    reply->manual_reset = event->manual_reset;
+    reply->state = event->signaled;
+
+    release_object( event );
+}
+
+/* create a keyed event */
+DECL_HANDLER(create_keyed_event)
+{
+    struct keyed_event *event;
+    struct unicode_str name;
+    struct directory *root = NULL;
+    const struct object_attributes *objattr = get_req_data();
+    const struct security_descriptor *sd;
+
+    if (!objattr_is_valid( objattr, get_req_data_size() )) return;
+
+    sd = objattr->sd_len ? (const struct security_descriptor *)(objattr + 1) : NULL;
+    objattr_get_name( objattr, &name );
+
+    if (objattr->rootdir && !(root = get_directory_obj( current->process, objattr->rootdir, 0 ))) return;
+
+    if ((event = create_keyed_event( root, &name, req->attributes, sd )))
+    {
+        if (get_error() == STATUS_OBJECT_NAME_EXISTS)
+            reply->handle = alloc_handle( current->process, event, req->access, req->attributes );
+        else
+            reply->handle = alloc_handle_no_access_check( current->process, event, req->access, req->attributes );
+        release_object( event );
+    }
+    if (root) release_object( root );
+}
+
+/* open a handle to a keyed event */
+DECL_HANDLER(open_keyed_event)
+{
+    struct unicode_str name;
+    struct directory *root = NULL;
+    struct keyed_event *event;
+
+    get_req_unicode_str( &name );
+    if (req->rootdir && !(root = get_directory_obj( current->process, req->rootdir, 0 ))) return;
+
+    if ((event = open_object_dir( root, &name, req->attributes, &keyed_event_ops )))
+    {
+        reply->handle = alloc_handle( current->process, &event->obj, req->access, req->attributes );
+        release_object( event );
+    }
+    if (root) release_object( root );
 }

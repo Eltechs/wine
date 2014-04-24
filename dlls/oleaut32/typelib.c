@@ -511,6 +511,57 @@ static const WCHAR HELPDIRW[] = {'H','E','L','P','D','I','R',0};
 static const WCHAR ProxyStubClsidW[] = {'P','r','o','x','y','S','t','u','b','C','l','s','i','d',0};
 static const WCHAR ProxyStubClsid32W[] = {'P','r','o','x','y','S','t','u','b','C','l','s','i','d','3','2',0};
 
+static void TLB_register_interface(TLIBATTR *libattr, LPOLESTR name, TYPEATTR *tattr, DWORD flag)
+{
+    WCHAR keyName[60];
+    HKEY key, subKey;
+
+    static const WCHAR PSOA[] = {'{','0','0','0','2','0','4','2','4','-',
+                                 '0','0','0','0','-','0','0','0','0','-','C','0','0','0','-',
+                                 '0','0','0','0','0','0','0','0','0','0','4','6','}',0};
+
+    get_interface_key( &tattr->guid, keyName );
+    if (RegCreateKeyExW(HKEY_CLASSES_ROOT, keyName, 0, NULL, 0,
+                        KEY_WRITE | flag, NULL, &key, NULL) == ERROR_SUCCESS)
+    {
+        if (name)
+            RegSetValueExW(key, NULL, 0, REG_SZ,
+                           (BYTE *)name, (strlenW(name)+1) * sizeof(OLECHAR));
+
+        if (RegCreateKeyExW(key, ProxyStubClsidW, 0, NULL, 0,
+            KEY_WRITE | flag, NULL, &subKey, NULL) == ERROR_SUCCESS) {
+            RegSetValueExW(subKey, NULL, 0, REG_SZ,
+                           (const BYTE *)PSOA, sizeof PSOA);
+            RegCloseKey(subKey);
+        }
+
+        if (RegCreateKeyExW(key, ProxyStubClsid32W, 0, NULL, 0,
+            KEY_WRITE | flag, NULL, &subKey, NULL) == ERROR_SUCCESS) {
+            RegSetValueExW(subKey, NULL, 0, REG_SZ,
+                           (const BYTE *)PSOA, sizeof PSOA);
+            RegCloseKey(subKey);
+        }
+
+        if (RegCreateKeyExW(key, TypeLibW, 0, NULL, 0,
+            KEY_WRITE | flag, NULL, &subKey, NULL) == ERROR_SUCCESS)
+        {
+            WCHAR buffer[40];
+            static const WCHAR fmtver[] = {'%','x','.','%','x',0 };
+            static const WCHAR VersionW[] = {'V','e','r','s','i','o','n',0};
+
+            StringFromGUID2(&libattr->guid, buffer, 40);
+            RegSetValueExW(subKey, NULL, 0, REG_SZ,
+                           (BYTE *)buffer, (strlenW(buffer)+1) * sizeof(WCHAR));
+            sprintfW(buffer, fmtver, libattr->wMajorVerNum, libattr->wMinorVerNum);
+            RegSetValueExW(subKey, VersionW, 0, REG_SZ,
+                           (BYTE*)buffer, (strlenW(buffer)+1) * sizeof(WCHAR));
+            RegCloseKey(subKey);
+        }
+
+        RegCloseKey(key);
+    }
+}
+
 /******************************************************************************
  *		RegisterTypeLib	[OLEAUT32.163]
  * Adds information about a type library to the System Registry
@@ -529,9 +580,6 @@ HRESULT WINAPI RegisterTypeLib(
      OLECHAR * szHelpDir)  /* [in] dir to the helpfile for the library,
 							 may be NULL*/
 {
-    static const WCHAR PSOA[] = {'{','0','0','0','2','0','4','2','4','-',
-                                 '0','0','0','0','-','0','0','0','0','-','C','0','0','0','-',
-                                 '0','0','0','0','0','0','0','0','0','0','4','6','}',0};
     HRESULT res;
     TLIBATTR *attr;
     WCHAR keyName[60];
@@ -706,47 +754,16 @@ HRESULT WINAPI RegisterTypeLib(
 		    if ((kind == TKIND_INTERFACE && (tattr->wTypeFlags & TYPEFLAG_FOLEAUTOMATION)) ||
                         kind == TKIND_DISPATCH)
 		    {
-			/* register interface<->typelib coupling */
-			get_interface_key( &tattr->guid, keyName );
-			if (RegCreateKeyExW(HKEY_CLASSES_ROOT, keyName, 0, NULL, 0,
-					    KEY_WRITE, NULL, &key, NULL) == ERROR_SUCCESS)
-			{
-			    if (name)
-				RegSetValueExW(key, NULL, 0, REG_SZ,
-					       (BYTE *)name, (strlenW(name)+1) * sizeof(OLECHAR));
+                        BOOL is_wow64;
+                        DWORD opposite = (sizeof(void*) == 8 ? KEY_WOW64_32KEY : KEY_WOW64_64KEY);
 
-			    if (RegCreateKeyExW(key, ProxyStubClsidW, 0, NULL, 0,
-				KEY_WRITE, NULL, &subKey, NULL) == ERROR_SUCCESS) {
-				RegSetValueExW(subKey, NULL, 0, REG_SZ,
-					       (const BYTE *)PSOA, sizeof PSOA);
-				RegCloseKey(subKey);
-			    }
+                        /* register interface<->typelib coupling */
+                        TLB_register_interface(attr, name, tattr, 0);
 
-			    if (RegCreateKeyExW(key, ProxyStubClsid32W, 0, NULL, 0,
-				KEY_WRITE, NULL, &subKey, NULL) == ERROR_SUCCESS) {
-				RegSetValueExW(subKey, NULL, 0, REG_SZ,
-					       (const BYTE *)PSOA, sizeof PSOA);
-				RegCloseKey(subKey);
-			    }
-
-			    if (RegCreateKeyExW(key, TypeLibW, 0, NULL, 0,
-				KEY_WRITE, NULL, &subKey, NULL) == ERROR_SUCCESS)
-			    {
-				WCHAR buffer[40];
-				static const WCHAR fmtver[] = {'%','x','.','%','x',0 };
-				static const WCHAR VersionW[] = {'V','e','r','s','i','o','n',0};
-
-				StringFromGUID2(&attr->guid, buffer, 40);
-				RegSetValueExW(subKey, NULL, 0, REG_SZ,
-					       (BYTE *)buffer, (strlenW(buffer)+1) * sizeof(WCHAR));
-				sprintfW(buffer, fmtver, attr->wMajorVerNum, attr->wMinorVerNum);
-				RegSetValueExW(subKey, VersionW, 0, REG_SZ,
-					       (BYTE*)buffer, (strlenW(buffer)+1) * sizeof(WCHAR));
-				RegCloseKey(subKey);
-			    }
-
-			    RegCloseKey(key);
-			}
+                        /* register TLBs into the opposite registry view, too */
+                        if(opposite == KEY_WOW64_32KEY ||
+                                 (IsWow64Process(GetCurrentProcess(), &is_wow64) && is_wow64))
+                            TLB_register_interface(attr, name, tattr, opposite);
 		    }
 
 		    ITypeInfo_ReleaseTypeAttr(tinfo, tattr);
@@ -1885,6 +1902,9 @@ static TLBString *TLB_append_str(struct list *string_list, BSTR new_str)
 {
     TLBString *str;
 
+    if(!new_str)
+        return NULL;
+
     LIST_FOR_EACH_ENTRY(str, string_list, TLBString, entry) {
         if (strcmpW(str->str, new_str) == 0)
             return str;
@@ -2139,24 +2159,17 @@ static void MSFT_ReadValue( VARIANT * pVar, int offset, TLBContext *pcx )
         case VT_BSTR    :{
             char * ptr;
             MSFT_ReadLEDWords(&size, sizeof(INT), pcx, DO_NOT_SEEK );
-	    if(size < 0) {
-                char next;
-                DWORD origPos = MSFT_Tell(pcx), nullPos;
-
-                do {
-                    MSFT_Read(&next, 1, pcx, DO_NOT_SEEK);
-                } while (next);
-                nullPos = MSFT_Tell(pcx);
-                size = nullPos - origPos;
-                MSFT_Seek(pcx, origPos);
-	    }
-            ptr = heap_alloc_zero(size);/* allocate temp buffer */
-            MSFT_Read(ptr, size, pcx, DO_NOT_SEEK);/* read string (ANSI) */
-            V_BSTR(pVar)=SysAllocStringLen(NULL,size);
-            /* FIXME: do we need a AtoW conversion here? */
-            V_UNION(pVar, bstrVal[size])='\0';
-            while(size--) V_UNION(pVar, bstrVal[size])=ptr[size];
-            heap_free(ptr);
+            if(size == -1){
+                V_BSTR(pVar) = NULL;
+            }else{
+                ptr = heap_alloc_zero(size);
+                MSFT_Read(ptr, size, pcx, DO_NOT_SEEK);
+                V_BSTR(pVar)=SysAllocStringLen(NULL,size);
+                /* FIXME: do we need a AtoW conversion here? */
+                V_UNION(pVar, bstrVal[size])='\0';
+                while(size--) V_UNION(pVar, bstrVal[size])=ptr[size];
+                heap_free(ptr);
+            }
 	}
 	size=-4; break;
     /* FIXME: this will not work AT ALL when the variant contains a pointer */
@@ -3358,7 +3371,7 @@ static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength)
     pTypeLibImpl->ptr_size = get_ptr_size(pTypeLibImpl->syskind);
     pTypeLibImpl->ver_major = LOWORD(tlbHeader.version);
     pTypeLibImpl->ver_minor = HIWORD(tlbHeader.version);
-    pTypeLibImpl->libflags = (WORD) tlbHeader.flags & 0xffff;/* check mask */
+    pTypeLibImpl->libflags = ((WORD) tlbHeader.flags & 0xffff) /* check mask */ | LIBFLAG_FHASDISKIMAGE;
 
     pTypeLibImpl->set_lcid = tlbHeader.lcid2;
     pTypeLibImpl->lcid = tlbHeader.lcid;

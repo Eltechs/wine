@@ -223,7 +223,7 @@ NTSTATUS WINAPI NtAdjustPrivilegesToken(
         ret = wine_server_call( req );
         if (PreviousState)
         {
-            *ReturnLength = reply->len + FIELD_OFFSET( TOKEN_PRIVILEGES, Privileges );
+            if (ReturnLength) *ReturnLength = reply->len + FIELD_OFFSET( TOKEN_PRIVILEGES, Privileges );
             PreviousState->PrivilegeCount = reply->len / sizeof(LUID_AND_ATTRIBUTES);
         }
     }
@@ -1080,10 +1080,16 @@ static inline void get_cpuinfo(SYSTEM_CPU_INFORMATION* info)
             while (isspace(*value)) value++;
             if ((s = strchr(value,'\n')))
                 *s='\0';
-            if (!strcasecmp(line, "CPU architecture"))
+            if (!strcasecmp(line, "CPU part"))
             {
                 if (isdigit(value[0]))
-                    info->Level = atoi(value);
+                    info->Level = strtol(value, NULL, 16);
+                continue;
+            }
+            if (!strcasecmp(line, "CPU revision"))
+            {
+                if (isdigit(value[0]))
+                    info->Revision = atoi(value);
                 continue;
             }
             if (!strcasecmp(line, "features"))

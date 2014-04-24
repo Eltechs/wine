@@ -6352,15 +6352,15 @@ msgid "No more bindings.\n"
 msgstr ""
 
 #: winerror.mc:3446
-msgid "Can't logon with inter-domain trust account.\n"
+msgid "Can't log on with inter-domain trust account.\n"
 msgstr ""
 
 #: winerror.mc:3451
-msgid "Can't logon with workstation trust account.\n"
+msgid "Can't log on with workstation trust account.\n"
 msgstr ""
 
 #: winerror.mc:3456
-msgid "Can't logon with server trust account.\n"
+msgid "Can't log on with server trust account.\n"
 msgstr ""
 
 #: winerror.mc:3461
@@ -13865,7 +13865,7 @@ msgstr "Помилка: Командний рядок не підтримуєт�
 
 #: wmic.rc:26
 msgid "Error: Alias not found\n"
-msgstr "Помилка: Псевдонім не знайдено.\n"
+msgstr "Помилка: Псевдонім не знайдено\n"
 
 #: wmic.rc:27
 msgid "Error: Invalid query\n"

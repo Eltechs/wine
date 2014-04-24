@@ -32,6 +32,7 @@
     BOOL fullscreen;
     BOOL pendingMinimize;
     WineWindow* latentParentWindow;
+    NSMutableArray* latentChildWindows;
 
     void* hwnd;
     WineEventQueue* queue;
@@ -54,8 +55,14 @@
     void* imeData;
     BOOL commandDone;
 
-    BOOL causing_becomeKeyWindow;
-    BOOL ignore_windowMiniaturize;
+    NSSize savedContentMinSize;
+    NSSize savedContentMaxSize;
+
+    BOOL enteringFullScreen;
+    BOOL exitingFullScreen;
+    NSRect nonFullscreenFrame;
+    NSTimeInterval enteredFullScreenTime;
+
     BOOL ignore_windowDeminiaturize;
 }
 
@@ -69,5 +76,8 @@
     - (void) updateFullscreen;
 
     - (void) postKeyEvent:(NSEvent *)theEvent;
+    - (void) postBroughtForwardEvent;
+
+    - (WineWindow*) ancestorWineWindow;
 
 @end

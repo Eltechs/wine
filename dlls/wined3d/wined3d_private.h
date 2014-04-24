@@ -1462,11 +1462,13 @@ enum wined3d_pci_device
     CARD_NVIDIA_GEFORCE_GTX650      = 0x0fc6,
     CARD_NVIDIA_GEFORCE_GTX650TI    = 0x11c6,
     CARD_NVIDIA_GEFORCE_GTX660      = 0x11c0,
+    CARD_NVIDIA_GEFORCE_GTX660M     = 0x0fd4,
     CARD_NVIDIA_GEFORCE_GTX660TI    = 0x1183,
     CARD_NVIDIA_GEFORCE_GTX670      = 0x1189,
     CARD_NVIDIA_GEFORCE_GTX670MX    = 0x11a1,
     CARD_NVIDIA_GEFORCE_GTX680      = 0x1180,
     CARD_NVIDIA_GEFORCE_GTX770M     = 0x11e0,
+    CARD_NVIDIA_GEFORCE_GTX770      = 0x1184,
 
     CARD_INTEL_830M                 = 0x3577,
     CARD_INTEL_855GM                = 0x3582,
@@ -1705,6 +1707,10 @@ const struct ffp_frag_desc *find_ffp_frag_shader(const struct wine_rb_tree *frag
         const struct ffp_frag_settings *settings) DECLSPEC_HIDDEN;
 void add_ffp_frag_shader(struct wine_rb_tree *shaders, struct ffp_frag_desc *desc) DECLSPEC_HIDDEN;
 void wined3d_get_draw_rect(const struct wined3d_state *state, RECT *rect) DECLSPEC_HIDDEN;
+void wined3d_ftoa(float value, char *s) DECLSPEC_HIDDEN;
+
+extern const float wined3d_srgb_const0[] DECLSPEC_HIDDEN;
+extern const float wined3d_srgb_const1[] DECLSPEC_HIDDEN;
 
 enum wined3d_ffp_vs_fog_mode
 {
@@ -1737,7 +1743,8 @@ struct wined3d_ffp_vs_settings
     DWORD point_size      : 1;
     DWORD fog_mode        : 2;
     DWORD texcoords       : 8;  /* MAX_TEXTURES */
-    DWORD padding         : 15;
+    DWORD ortho_fog       : 1;
+    DWORD padding         : 14;
 
     BYTE texgen[MAX_TEXTURES];
 };
@@ -2532,8 +2539,7 @@ struct wined3d_swapchain
     struct wined3d_surface **back_buffers;
     struct wined3d_surface *front_buffer;
     struct wined3d_swapchain_desc desc;
-    DWORD orig_width, orig_height;
-    enum wined3d_format_id orig_fmt;
+    struct wined3d_display_mode original_mode;
     struct wined3d_gamma_ramp orig_gamma;
     BOOL render_to_fbo;
     const struct wined3d_format *ds_format;
@@ -2661,6 +2667,8 @@ void multiply_matrix(struct wined3d_matrix *dest, const struct wined3d_matrix *s
         const struct wined3d_matrix *src2) DECLSPEC_HIDDEN;
 UINT wined3d_log2i(UINT32 x) DECLSPEC_HIDDEN;
 unsigned int count_bits(unsigned int mask) DECLSPEC_HIDDEN;
+
+void wined3d_release_dc(HWND window, HDC dc) DECLSPEC_HIDDEN;
 
 struct wined3d_shader_lconst
 {

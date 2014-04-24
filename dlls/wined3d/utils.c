@@ -27,6 +27,8 @@
 #include "config.h"
 #include "wine/port.h"
 
+#include <stdio.h>
+
 #include "wined3d_private.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3d);
@@ -837,10 +839,18 @@ static const struct wined3d_format_texture_info format_texture_info[] =
             | WINED3DFMT_FLAG_BUMPMAP,
             NV_TEXTURE_SHADER,          NULL},
     /* Depth stencil formats */
+    {WINED3DFMT_D16_LOCKABLE,           GL_DEPTH_COMPONENT,               GL_DEPTH_COMPONENT,                     0,
+            GL_DEPTH_COMPONENT,         GL_UNSIGNED_SHORT,                0,
+            WINED3DFMT_FLAG_DEPTH,
+            WINED3D_GL_EXT_NONE,        NULL},
     {WINED3DFMT_D16_LOCKABLE,           GL_DEPTH_COMPONENT24_ARB,         GL_DEPTH_COMPONENT24_ARB,               0,
             GL_DEPTH_COMPONENT,         GL_UNSIGNED_SHORT,                0,
             WINED3DFMT_FLAG_TEXTURE | WINED3DFMT_FLAG_DEPTH | WINED3DFMT_FLAG_SHADOW,
             ARB_DEPTH_TEXTURE,          NULL},
+    {WINED3DFMT_D32_UNORM,              GL_DEPTH_COMPONENT,               GL_DEPTH_COMPONENT,                     0,
+            GL_DEPTH_COMPONENT,         GL_UNSIGNED_INT,                  0,
+            WINED3DFMT_FLAG_DEPTH,
+            WINED3D_GL_EXT_NONE,        NULL},
     {WINED3DFMT_D32_UNORM,              GL_DEPTH_COMPONENT32_ARB,         GL_DEPTH_COMPONENT32_ARB,               0,
             GL_DEPTH_COMPONENT,         GL_UNSIGNED_INT,                  0,
             WINED3DFMT_FLAG_TEXTURE | WINED3DFMT_FLAG_DEPTH | WINED3DFMT_FLAG_SHADOW,
@@ -872,6 +882,10 @@ static const struct wined3d_format_texture_info format_texture_info[] =
             WINED3DFMT_FLAG_TEXTURE | WINED3DFMT_FLAG_POSTPIXELSHADER_BLENDING | WINED3DFMT_FLAG_FILTERING
             | WINED3DFMT_FLAG_DEPTH | WINED3DFMT_FLAG_STENCIL | WINED3DFMT_FLAG_SHADOW,
             ARB_FRAMEBUFFER_OBJECT,     NULL},
+    {WINED3DFMT_X8D24_UNORM,            GL_DEPTH_COMPONENT,               GL_DEPTH_COMPONENT,                     0,
+            GL_DEPTH_COMPONENT,         GL_UNSIGNED_INT,                  0,
+            WINED3DFMT_FLAG_DEPTH,
+            WINED3D_GL_EXT_NONE,        NULL},
     {WINED3DFMT_X8D24_UNORM,            GL_DEPTH_COMPONENT24_ARB,         GL_DEPTH_COMPONENT24_ARB,               0,
             GL_DEPTH_COMPONENT,         GL_UNSIGNED_INT,                  0,
             WINED3DFMT_FLAG_TEXTURE | WINED3DFMT_FLAG_POSTPIXELSHADER_BLENDING | WINED3DFMT_FLAG_FILTERING
@@ -889,6 +903,10 @@ static const struct wined3d_format_texture_info format_texture_info[] =
             GL_DEPTH_STENCIL,           GL_UNSIGNED_INT_24_8,             4,
             WINED3DFMT_FLAG_DEPTH | WINED3DFMT_FLAG_STENCIL | WINED3DFMT_FLAG_SHADOW,
             ARB_FRAMEBUFFER_OBJECT,     convert_s4x4_uint_d24_unorm},
+    {WINED3DFMT_D16_UNORM,              GL_DEPTH_COMPONENT,               GL_DEPTH_COMPONENT,                     0,
+            GL_DEPTH_COMPONENT,         GL_UNSIGNED_SHORT,                0,
+            WINED3DFMT_FLAG_DEPTH,
+            WINED3D_GL_EXT_NONE,        NULL},
     {WINED3DFMT_D16_UNORM,              GL_DEPTH_COMPONENT24_ARB,         GL_DEPTH_COMPONENT24_ARB,               0,
             GL_DEPTH_COMPONENT,         GL_UNSIGNED_SHORT,                0,
             WINED3DFMT_FLAG_TEXTURE | WINED3DFMT_FLAG_POSTPIXELSHADER_BLENDING | WINED3DFMT_FLAG_FILTERING
@@ -3614,10 +3632,19 @@ void wined3d_ffp_get_vs_settings(const struct wined3d_state *state, const struct
                     & WINED3D_FFP_LIGHT_TYPE_MASK) << WINED3D_FFP_LIGHT_TYPE_SHIFT(i);
     }
 
+    settings->ortho_fog = 0;
     if (!state->render_states[WINED3D_RS_FOGENABLE])
         settings->fog_mode = WINED3D_FFP_VS_FOG_OFF;
     else if (state->render_states[WINED3D_RS_FOGTABLEMODE] != WINED3D_FOG_NONE)
+    {
         settings->fog_mode = WINED3D_FFP_VS_FOG_DEPTH;
+
+        if (state->transforms[WINED3D_TS_PROJECTION].u.m[0][3] == 0.0f
+                && state->transforms[WINED3D_TS_PROJECTION].u.m[1][3] == 0.0f
+                && state->transforms[WINED3D_TS_PROJECTION].u.m[2][3] == 0.0f
+                && state->transforms[WINED3D_TS_PROJECTION].u.m[3][3] == 1.0f)
+            settings->ortho_fog = 1;
+    }
     else if (state->render_states[WINED3D_RS_FOGVERTEXMODE] == WINED3D_FOG_NONE)
         settings->fog_mode = WINED3D_FFP_VS_FOG_FOGCOORD;
     else if (state->render_states[WINED3D_RS_RANGEFOGENABLE])
@@ -3702,4 +3729,32 @@ void wined3d_get_draw_rect(const struct wined3d_state *state, RECT *rect)
 
     if (state->render_states[WINED3D_RS_SCISSORTESTENABLE])
         IntersectRect(rect, rect, &state->scissor_rect);
+}
+
+/* Print a floating point value with the %.8e format specifier, always using
+ * '.' as decimal separator. */
+void wined3d_ftoa(float value, char *s)
+{
+    int idx = 1;
+
+    if (copysignf(1.0f, value) < 0.0f)
+        ++idx;
+
+    sprintf(s, "%.8e", value);
+    if (isfinite(value))
+        s[idx] = '.';
+}
+
+void wined3d_release_dc(HWND window, HDC dc)
+{
+    /* You'd figure ReleaseDC() would fail if the DC doesn't match the window.
+     * However, that's not what actually happens, and there are user32 tests
+     * that confirm ReleaseDC() with the wrong window is supposed to succeed.
+     * So explicitly check that the DC belongs to the window, since we want to
+     * avoid releasing a DC that belongs to some other window if the original
+     * window was already destroyed. */
+    if (WindowFromDC(dc) != window)
+        WARN("DC %p does not belong to window %p.\n", dc, window);
+    else if (!ReleaseDC(window, dc))
+        ERR("Failed to release device context %p, last error %#x.\n", dc, GetLastError());
 }

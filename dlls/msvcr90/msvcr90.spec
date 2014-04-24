@@ -12,12 +12,12 @@
 @ cdecl -arch=win64 ??0bad_typeid@std@@QEAA@AEBV01@@Z(ptr ptr) msvcrt.??0bad_typeid@@QEAA@AEBV0@@Z
 @ thiscall -arch=i386 ??0bad_typeid@std@@QAE@PBD@Z(ptr str) msvcrt.??0bad_typeid@@QAE@PBD@Z
 @ cdecl -arch=win64 ??0bad_typeid@std@@QEAA@PEBD@Z(ptr str) msvcrt.??0bad_typeid@@QEAA@PEBD@Z
-@ thiscall -arch=i386 ??0exception@std@@QAE@ABQBD@Z(ptr ptr) msvcrt.??0exception@@QAE@ABQBD@Z
-@ cdecl -arch=win64 ??0exception@std@@QEAA@AEBQEBD@Z(ptr ptr) msvcrt.??0exception@@QEAA@AEBQEBD@Z
-@ thiscall -arch=i386 ??0exception@std@@QAE@ABQBDH@Z(ptr ptr long) msvcrt.??0exception@@QAE@ABQBDH@Z
-@ cdecl -arch=win64 ??0exception@std@@QEAA@AEBQEBDH@Z(ptr ptr long) msvcrt.??0exception@@QEAA@AEBQEBDH@Z
-@ thiscall -arch=i386 ??0exception@std@@QAE@ABV01@@Z(ptr ptr) msvcrt.??0exception@@QAE@ABV0@@Z
-@ cdecl -arch=win64 ??0exception@std@@QEAA@AEBV01@@Z(ptr ptr) msvcrt.??0exception@@QEAA@AEBV0@@Z
+@ thiscall -arch=i386 ??0exception@std@@QAE@ABQBD@Z(ptr ptr) exception_ctor
+@ cdecl -arch=win64 ??0exception@std@@QEAA@AEBQEBD@Z(ptr ptr) exception_ctor
+@ thiscall -arch=i386 ??0exception@std@@QAE@ABQBDH@Z(ptr ptr long) exception_ctor_noalloc
+@ cdecl -arch=win64 ??0exception@std@@QEAA@AEBQEBDH@Z(ptr ptr long) exception_ctor_noalloc
+@ thiscall -arch=i386 ??0exception@std@@QAE@ABV01@@Z(ptr ptr) exception_copy_ctor
+@ cdecl -arch=win64 ??0exception@std@@QEAA@AEBV01@@Z(ptr ptr) exception_copy_ctor
 @ thiscall -arch=i386 ??0exception@std@@QAE@XZ(ptr) msvcrt.??0exception@@QAE@XZ
 @ cdecl -arch=win64 ??0exception@std@@QEAA@XZ(ptr) msvcrt.??0exception@@QEAA@XZ
 @ thiscall -arch=i386 ??1__non_rtti_object@std@@UAE@XZ(ptr) msvcrt.??1__non_rtti_object@@UAE@XZ
@@ -26,8 +26,8 @@
 @ cdecl -arch=win64 ??1bad_cast@std@@UEAA@XZ(ptr) msvcrt.??1bad_cast@@UEAA@XZ
 @ thiscall -arch=i386 ??1bad_typeid@std@@UAE@XZ(ptr) msvcrt.??1bad_typeid@@UAE@XZ
 @ cdecl -arch=win64 ??1bad_typeid@std@@UEAA@XZ(ptr) msvcrt.??1bad_typeid@@UEAA@XZ
-@ thiscall -arch=i386 ??1exception@std@@UAE@XZ(ptr) msvcrt.??1exception@@UAE@XZ
-@ cdecl -arch=win64 ??1exception@std@@UEAA@XZ(ptr) msvcrt.??1exception@@UEAA@XZ
+@ thiscall -arch=i386 ??1exception@std@@UAE@XZ(ptr) exception_dtor
+@ cdecl -arch=win64 ??1exception@std@@UEAA@XZ(ptr) exception_dtor
 @ thiscall -arch=i386 ??1type_info@@UAE@XZ(ptr) msvcrt.??1type_info@@UAE@XZ
 @ cdecl -arch=win64 ??1type_info@@UEAA@XZ(ptr) msvcrt.??1type_info@@UEAA@XZ
 @ cdecl -arch=win32 ??2@YAPAXI@Z(long) MSVCR90_operator_new
@@ -107,7 +107,7 @@
 @ cdecl -arch=win64 ?_wopen@@YAHPEB_WHH@Z(wstr long long) msvcrt._wopen
 @ cdecl -arch=win32 ?_wsopen@@YAHPB_WHHH@Z(wstr long long long) msvcrt._wsopen
 @ cdecl -arch=win64 ?_wsopen@@YAHPEB_WHHH@Z(wstr long long long) msvcrt._wsopen
-@ thiscall -arch=win32 ?before@type_info@@QBEHABV1@@Z(ptr ptr) msvcrt.?before@type_info@@QBEHABV1@@Z
+@ thiscall -arch=i386 ?before@type_info@@QBEHABV1@@Z(ptr ptr) msvcrt.?before@type_info@@QBEHABV1@@Z
 @ cdecl -arch=win64 ?before@type_info@@QEBAHAEBV1@@Z(ptr ptr) msvcrt.?before@type_info@@QEBAHAEBV1@@Z
 @ stub -arch=win32 ?name@type_info@@QBEPBDPAU__type_info_node@@@Z  # public: char const * __thiscall type_info::name(struct __type_info_node *)const
 @ stub -arch=win64 ?name@type_info@@QEBAPEBDPEAU__type_info_node@@@Z  # public: char const * __ptr64 __cdecl type_info::name(struct __type_info_node * __ptr64)const __ptr64
@@ -367,7 +367,7 @@
 @ cdecl -arch=i386 -norelay _chkesp() msvcrt._chkesp
 @ cdecl _chmod(str long) msvcrt._chmod
 @ cdecl _chsize(long long) msvcrt._chsize
-@ stub _chsize_s
+@ cdecl _chsize_s(long int64) msvcrt._chsize_s
 @ cdecl _clearfp() msvcrt._clearfp
 @ cdecl _close(long) msvcrt._close
 @ cdecl _commit(long) msvcrt._commit
@@ -853,7 +853,7 @@
 @ cdecl _mkgmtime32(ptr) msvcrt._mkgmtime32
 @ cdecl _mkgmtime64(ptr) msvcrt._mkgmtime64
 @ cdecl _mktemp(str) msvcrt._mktemp
-@ stub _mktemp_s
+@ cdecl _mktemp_s(str long) msvcrt._mktemp_s
 @ cdecl _mktime32(ptr) msvcrt._mktime32
 @ cdecl _mktime64(ptr) msvcrt._mktime64
 @ cdecl _msize(ptr) msvcrt._msize
@@ -950,7 +950,7 @@
 @ varargs _snwprintf(ptr long wstr) msvcrt._snwprintf
 @ varargs _snwprintf_l(ptr long wstr ptr) msvcrt._snwprintf_l
 @ varargs _snwprintf_s(ptr long long wstr) msvcrt._snwprintf_s
-@ stub _snwprintf_s_l
+@ varargs _snwprintf_s_l(ptr long long wstr ptr) msvcrt._snwprintf_s_l
 @ varargs _snwscanf(wstr long wstr) msvcrt._snwscanf
 @ varargs _snwscanf_l(wstr long wstr ptr) msvcrt._snwscanf_l
 @ varargs _snwscanf_s(wstr long wstr) msvcrt._snwscanf_s
@@ -1025,7 +1025,7 @@
 @ stub _swprintf_c_l
 @ stub _swprintf_p
 @ varargs _swprintf_p_l(ptr long wstr ptr) msvcrt._swprintf_p_l
-@ stub _swprintf_s_l
+@ varargs _swprintf_s_l(ptr long wstr ptr) msvcrt._swprintf_s_l
 @ varargs _swscanf_l(wstr wstr ptr) msvcrt._swscanf_l
 @ varargs _swscanf_s_l(wstr wstr ptr) msvcrt._swscanf_s_l
 @ extern _sys_errlist msvcrt._sys_errlist
@@ -1159,7 +1159,7 @@
 @ cdecl _wcstod_l(wstr ptr) msvcrt._wcstod_l
 @ cdecl -ret64 _wcstoi64(wstr ptr long) msvcrt._wcstoi64
 @ cdecl -ret64 _wcstoi64_l(wstr ptr long ptr) msvcrt._wcstoi64_l
-@ stub _wcstol_l
+@ cdecl _wcstol_l(wstr ptr long ptr) msvcrt._wcstol_l
 @ cdecl _wcstombs_l(ptr ptr long ptr) msvcrt._wcstombs_l
 @ cdecl _wcstombs_s_l(ptr ptr long wstr long ptr) msvcrt._wcstombs_s_l
 @ cdecl -ret64 _wcstoui64(wstr ptr long) msvcrt._wcstoui64
@@ -1174,8 +1174,8 @@
 @ stub _wctime32_s
 @ cdecl _wctime64(ptr) msvcrt._wctime64
 @ stub _wctime64_s
-@ stub _wctomb_l
-@ stub _wctomb_s_l
+@ cdecl _wctomb_l(ptr long ptr) msvcrt._wctomb_l
+@ cdecl _wctomb_s_l(ptr ptr long long ptr) msvcrt._wctomb_s_l
 # extern _wctype
 @ cdecl _wdupenv_s(ptr ptr wstr) msvcrt._wdupenv_s
 @ extern _wenviron msvcrt._wenviron
@@ -1211,7 +1211,7 @@
 @ cdecl _wmakepath_s(ptr long wstr wstr wstr wstr) msvcrt._wmakepath_s
 @ cdecl _wmkdir(wstr) msvcrt._wmkdir
 @ cdecl _wmktemp(wstr) msvcrt._wmktemp
-@ stub _wmktemp_s
+@ cdecl _wmktemp_s(wstr long) msvcrt._wmktemp_s
 @ varargs _wopen(wstr long) msvcrt._wopen
 @ cdecl _wperror(wstr) msvcrt._wperror
 @ extern _wpgmptr msvcrt._wpgmptr
@@ -1529,7 +1529,7 @@
 @ cdecl wcsxfrm(ptr wstr long) msvcrt.wcsxfrm
 @ cdecl wctob(long) msvcrt.wctob
 @ cdecl wctomb(ptr long) msvcrt.wctomb
-@ stub wctomb_s
+@ cdecl wctomb_s(ptr ptr long long) msvcrt.wctomb_s
 @ varargs wprintf(wstr) msvcrt.wprintf
 @ varargs wprintf_s(wstr) msvcrt.wprintf_s
 @ varargs wscanf(wstr) msvcrt.wscanf

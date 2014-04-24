@@ -56,7 +56,19 @@ int ME_GetSelectionOfs(ME_TextEditor *editor, int *from, int *to)
 
 int ME_GetSelection(ME_TextEditor *editor, ME_Cursor **from, ME_Cursor **to)
 {
-  if (ME_GetCursorOfs(&editor->pCursors[0]) < ME_GetCursorOfs(&editor->pCursors[1]))
+  int from_ofs = ME_GetCursorOfs( &editor->pCursors[0] );
+  int to_ofs   = ME_GetCursorOfs( &editor->pCursors[1] );
+  BOOL swap = (from_ofs > to_ofs);
+
+  if (from_ofs == to_ofs)
+  {
+      /* If cursor[0] is at the beginning of a run and cursor[1] at the end
+         of the prev run then we need to swap. */
+      if (editor->pCursors[0].nOffset < editor->pCursors[1].nOffset)
+          swap = TRUE;
+  }
+
+  if (!swap)
   {
     *from = &editor->pCursors[0];
     *to = &editor->pCursors[1];
@@ -284,13 +296,15 @@ BOOL ME_InternalDeleteText(ME_TextEditor *editor, ME_Cursor *start,
                            int nChars, BOOL bForce)
 {
   ME_Cursor c = *start;
-  int nOfs = ME_GetCursorOfs(start);
+  int nOfs = ME_GetCursorOfs(start), text_len = ME_GetTextLength( editor );
   int shift = 0;
   int totalChars = nChars;
   ME_DisplayItem *start_para;
+  BOOL delete_all = FALSE;
 
   /* Prevent deletion past last end of paragraph run. */
-  nChars = min(nChars, ME_GetTextLength(editor) - nOfs);
+  nChars = min(nChars, text_len - nOfs);
+  if (nChars == text_len) delete_all = TRUE;
   start_para = c.pPara;
 
   if (!bForce)
@@ -424,6 +438,7 @@ BOOL ME_InternalDeleteText(ME_TextEditor *editor, ME_Cursor *start,
       continue;
     }
   }
+  if (delete_all) ME_SetDefaultParaFormat( start_para->member.para.pFmt );
   return TRUE;
 }
 

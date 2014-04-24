@@ -1409,7 +1409,7 @@ int __thiscall basic_streambuf_char_sputc(basic_streambuf_char *this, char ch)
 {
     TRACE("(%p %d)\n", this, ch);
     return basic_streambuf_char__Pnavail(this) ?
-        (*basic_streambuf_char__Pninc(this) = ch) :
+        (unsigned char)(*basic_streambuf_char__Pninc(this) = ch) :
         call_basic_streambuf_char_overflow(this, (unsigned char)ch);
 }
 
@@ -2310,7 +2310,8 @@ void __thiscall basic_filebuf_char__Init(basic_filebuf_char *this, FILE *file, b
     this->cvt = NULL;
     this->state0 = basic_filebuf_char__Init__Stinit;
     this->state = basic_filebuf_char__Init__Stinit;
-    this->str = NULL;
+    if(which == INITFL_new)
+        this->str = NULL;
     this->close = (which == INITFL_open);
     this->file = file;
 
@@ -2802,7 +2803,8 @@ static void basic_filebuf_wchar__Init(basic_filebuf_wchar *this, FILE *file, bas
     this->cvt = NULL;
     this->state0 = basic_filebuf_short__Init__Stinit;
     this->state = basic_filebuf_short__Init__Stinit;
-    this->str = NULL;
+    if(which == INITFL_new)
+        this->str = NULL;
     this->close = (which == INITFL_open);
     this->file = file;
 
@@ -2819,7 +2821,8 @@ void __thiscall basic_filebuf_short__Init(basic_filebuf_wchar *this, FILE *file,
     this->cvt = NULL;
     this->state0 = basic_filebuf_short__Init__Stinit;
     this->state = basic_filebuf_short__Init__Stinit;
-    this->str = NULL;
+    if(which == INITFL_new)
+        this->str = NULL;
     this->close = (which == INITFL_open);
     this->file = file;
 
@@ -3444,7 +3447,7 @@ int __thiscall basic_stringbuf_char_overflow(basic_stringbuf_char *this, int met
                 this->seekhigh, basic_streambuf_char_epptr(&this->base));
 
     if(ptr && ptr<basic_streambuf_char_epptr(&this->base))
-        return (*basic_streambuf_char__Pninc(&this->base) = meta);
+        return (unsigned char)(*basic_streambuf_char__Pninc(&this->base) = meta);
 
     oldsize = (ptr ? basic_streambuf_char_epptr(&this->base)-basic_streambuf_char_eback(&this->base): 0);
     size = oldsize|0xf;
@@ -3481,7 +3484,7 @@ int __thiscall basic_stringbuf_char_overflow(basic_stringbuf_char *this, int met
         MSVCRT_operator_delete(ptr);
     }
 
-    return (*basic_streambuf_char__Pninc(&this->base) = meta);
+    return (unsigned char)(*basic_streambuf_char__Pninc(&this->base) = meta);
 }
 
 /* ?pbackfail@?$basic_stringbuf@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@MAEHH@Z */

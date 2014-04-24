@@ -8110,7 +8110,7 @@ static locale__Locimp* locale__Locimp__Makeloc(const _Locinfo *locinfo, category
     locale__Locimp__Makeushloc(locinfo, cat, locimp, loc);
 
     locimp->catmask |= cat;
-    basic_string_char_copy_ctor(&locimp->name, &locinfo->newlocname);
+    basic_string_char_assign(&locimp->name, &locinfo->newlocname);
     return locimp;
 }
 
@@ -8278,7 +8278,7 @@ void __thiscall locale_dtor(locale *this)
     TRACE("(%p)\n", this);
     if(this->ptr && locale_facet__Decref(&this->ptr->facet)) {
         locale__Locimp_dtor(this->ptr);
-        MSVCRT_operator_delete(this);
+        MSVCRT_operator_delete(this->ptr);
     }
 }
 

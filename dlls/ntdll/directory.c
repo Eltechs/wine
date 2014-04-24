@@ -780,8 +780,8 @@ static char *get_device_mount_point( dev_t dev )
         if (stat( entry[i].f_mntfromname, &st ) == -1) continue;
         if (S_ISBLK(st.st_mode) && st.st_rdev == dev)
         {
-            ret = RtlAllocateHeap( GetProcessHeap(), 0, strlen(entry[i].f_mntfromname) + 1 );
-            if (ret) strcpy( ret, entry[i].f_mntfromname );
+            ret = RtlAllocateHeap( GetProcessHeap(), 0, strlen(entry[i].f_mntonname) + 1 );
+            if (ret) strcpy( ret, entry[i].f_mntonname );
             break;
         }
     }
@@ -1848,9 +1848,6 @@ static int read_directory_getdirentries( int fd, IO_STATUS_BLOCK *io, void *buff
             continue;
         }
         if (size < initial_size) break;  /* already restarted once, give up now */
-        size = min( size, length - io->Information );
-        /* if size is too small don't bother to continue */
-        if (size < max_dir_info_size(class) && last_info) break;
         restart_last_info = last_info;
         restart_info_pos = io->Information;
     restart:

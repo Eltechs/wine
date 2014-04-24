@@ -91,7 +91,7 @@ static const struct object_ops console_input_ops =
 
 static void console_input_events_dump( struct object *obj, int verbose );
 static void console_input_events_destroy( struct object *obj );
-static int  console_input_events_signaled( struct object *obj, struct thread *thread );
+static int console_input_events_signaled( struct object *obj, struct wait_queue_entry *entry );
 
 struct console_input_events
 {
@@ -222,7 +222,7 @@ static void console_input_events_destroy( struct object *obj )
 }
 
 /* the renderer events list is signaled when it's not empty */
-static int console_input_events_signaled( struct object *obj, struct thread *thread )
+static int console_input_events_signaled( struct object *obj, struct wait_queue_entry *entry )
 {
     struct console_input_events *evts = (struct console_input_events *)obj;
     assert( obj->ops == &console_input_events_ops );
@@ -1034,7 +1034,7 @@ static void console_input_append_hist( struct console_input* console, const WCHA
     ptr[len] = 0;
 
     if (console->history_mode && console->history_index &&
-	strncmpW( console->history[console->history_index - 1], ptr, len * sizeof(WCHAR) ) == 0)
+	strncmpW( console->history[console->history_index - 1], ptr, len ) == 0)
     {
 	/* ok, mode ask us to not use twice the same string...
 	 * so just free mem and returns

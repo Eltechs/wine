@@ -141,6 +141,8 @@ static const WCHAR szVia[] = { 'V','i','a',0 };
 static const WCHAR szWarning[] = { 'W','a','r','n','i','n','g',0 };
 static const WCHAR szWWW_Authenticate[] = { 'W','W','W','-','A','u','t','h','e','n','t','i','c','a','t','e',0 };
 
+static const WCHAR emptyW[] = {0};
+
 #define HTTP_REFERER    szReferer
 #define HTTP_ACCEPT     szAccept
 #define HTTP_USERAGENT  szUser_Agent
@@ -398,6 +400,7 @@ typedef struct {
     DWORD buf_size;
     DWORD buf_pos;
     DWORD chunk_size;
+    BOOL end_of_data;
 } chunked_stream_t;
 
 static inline void destroy_data_stream(data_stream_t *stream)
@@ -2030,24 +2033,35 @@ static DWORD str_to_buffer(const WCHAR *str, void *buffer, DWORD *size, BOOL uni
     int len;
     if (unicode)
     {
-        len = strlenW(str);
+        WCHAR *buf = buffer;
+
+        if (str) len = strlenW(str);
+        else len = 0;
         if (*size < (len + 1) * sizeof(WCHAR))
         {
             *size = (len + 1) * sizeof(WCHAR);
             return ERROR_INSUFFICIENT_BUFFER;
         }
-        strcpyW(buffer, str);
+        if (str) strcpyW(buf, str);
+        else buf[0] = 0;
+
         *size = len;
         return ERROR_SUCCESS;
     }
     else
     {
-        len = WideCharToMultiByte(CP_ACP, 0, str, -1, buffer, *size, NULL, NULL);
+        char *buf = buffer;
+
+        if (str) len = WideCharToMultiByte(CP_ACP, 0, str, -1, NULL, 0, NULL, NULL);
+        else len = 1;
         if (*size < len)
         {
             *size = len;
             return ERROR_INSUFFICIENT_BUFFER;
         }
+        if (str) WideCharToMultiByte(CP_ACP, 0, str, -1, buf, *size, NULL, NULL);
+        else buf[0] = 0;
+
         *size = len - 1;
         return ERROR_SUCCESS;
     }
@@ -2684,6 +2698,8 @@ static DWORD read_more_chunked_data(chunked_stream_t *stream, http_request_t *re
     DWORD res;
     int len;
 
+    assert(!stream->end_of_data);
+
     if (stream->buf_pos)
     {
         /* move existing data to the start of the buffer */
@@ -2731,10 +2747,14 @@ static DWORD discard_chunked_eol(chunked_stream_t *stream, http_request_t *req)
 /* read the size of the next chunk (the read section must be held) */
 static DWORD start_next_chunk(chunked_stream_t *stream, http_request_t *req)
 {
-    /* TODOO */
     DWORD chunk_size = 0, res;
 
-    if(stream->chunk_size != ~0u && (res = discard_chunked_eol(stream, req)) != ERROR_SUCCESS)
+    assert(!stream->chunk_size || stream->chunk_size == ~0u);
+
+    if (stream->end_of_data) return ERROR_NO_MORE_FILES;
+
+    /* read terminator for the previous chunk */
+    if(!stream->chunk_size && (res = discard_chunked_eol(stream, req)) != ERROR_SUCCESS)
         return res;
 
     for (;;)
@@ -2749,7 +2769,10 @@ static DWORD start_next_chunk(chunked_stream_t *stream, http_request_t *req)
             {
                 TRACE( "reading %u byte chunk\n", chunk_size );
                 stream->chunk_size = chunk_size;
-                req->contentLength += chunk_size;
+                if (req->contentLength == ~0u) req->contentLength = chunk_size;
+                else req->contentLength += chunk_size;
+
+                if (!chunk_size) stream->end_of_data = TRUE;
                 return discard_chunked_eol(stream, req);
             }
             remove_chunked_data(stream, 1);
@@ -2772,7 +2795,7 @@ static DWORD chunked_get_avail_data(data_stream_t *stream, http_request_t *req)
 static BOOL chunked_end_of_data(data_stream_t *stream, http_request_t *req)
 {
     chunked_stream_t *chunked_stream = (chunked_stream_t*)stream;
-    return !chunked_stream->chunk_size;
+    return chunked_stream->end_of_data;
 }
 
 static DWORD chunked_read(data_stream_t *stream, http_request_t *req, BYTE *buf, DWORD size,
@@ -2781,13 +2804,13 @@ static DWORD chunked_read(data_stream_t *stream, http_request_t *req, BYTE *buf,
     chunked_stream_t *chunked_stream = (chunked_stream_t*)stream;
     DWORD read_bytes = 0, ret_read = 0, res = ERROR_SUCCESS;
 
-    if(chunked_stream->chunk_size == ~0u) {
+    if(!chunked_stream->chunk_size || chunked_stream->chunk_size == ~0u) {
         res = start_next_chunk(chunked_stream, req);
         if(res != ERROR_SUCCESS)
             return res;
     }
 
-    while(size && chunked_stream->chunk_size) {
+    while(size && chunked_stream->chunk_size && !chunked_stream->end_of_data) {
         if(chunked_stream->buf_size) {
             read_bytes = min(size, min(chunked_stream->buf_size, chunked_stream->chunk_size));
 
@@ -2821,7 +2844,7 @@ static DWORD chunked_read(data_stream_t *stream, http_request_t *req, BYTE *buf,
         chunked_stream->chunk_size -= read_bytes;
         size -= read_bytes;
         ret_read += read_bytes;
-        if(!chunked_stream->chunk_size) {
+        if(size && !chunked_stream->chunk_size) {
             assert(read_mode != READMODE_NOBLOCK);
             res = start_next_chunk(chunked_stream, req);
             if(res != ERROR_SUCCESS)
@@ -2841,8 +2864,8 @@ static BOOL chunked_drain_content(data_stream_t *stream, http_request_t *req)
 {
     chunked_stream_t *chunked_stream = (chunked_stream_t*)stream;
 
-    /* FIXME: we can do better */
-    return !chunked_stream->chunk_size;
+    remove_chunked_data(chunked_stream, chunked_stream->buf_size);
+    return chunked_stream->end_of_data;
 }
 
 static void chunked_destroy(data_stream_t *stream)
@@ -2891,6 +2914,7 @@ static DWORD set_content_length(http_request_t *request)
         chunked_stream->data_stream.vtbl = &chunked_stream_vtbl;
         chunked_stream->buf_size = chunked_stream->buf_pos = 0;
         chunked_stream->chunk_size = ~0u;
+        chunked_stream->end_of_data = FALSE;
 
         if(request->read_size) {
             memcpy(chunked_stream->buf, request->read_buf+request->read_pos, request->read_size);
@@ -3874,6 +3898,8 @@ BOOL WINAPI HttpQueryInfoA(HINTERNET hHttpRequest, DWORD dwInfoLevel,
     DWORD len;
     WCHAR* bufferW;
 
+    TRACE("%p %x\n", hHttpRequest, dwInfoLevel);
+
     if((dwInfoLevel & HTTP_QUERY_FLAG_NUMBER) ||
        (dwInfoLevel & HTTP_QUERY_FLAG_SYSTEMTIME))
     {
@@ -4828,7 +4854,6 @@ static DWORD HTTP_HttpSendRequestW(http_request_t *request, LPCWSTR lpszHeaders,
     LPWSTR requestString = NULL;
     INT responseLen;
     BOOL loop_next;
-    static const WCHAR szPost[] = { 'P','O','S','T',0 };
     static const WCHAR szContentLength[] =
         { 'C','o','n','t','e','n','t','-','L','e','n','g','t','h',':',' ','%','l','i','\r','\n',0 };
     WCHAR contentLengthStr[sizeof szContentLength/2 /* includes \r\n */ + 20 /* int */ ];
@@ -4866,7 +4891,7 @@ static DWORD HTTP_HttpSendRequestW(http_request_t *request, LPCWSTR lpszHeaders,
         static const WCHAR pragma_nocache[] = {'P','r','a','g','m','a',':',' ','n','o','-','c','a','c','h','e','\r','\n',0};
         HTTP_HttpAddRequestHeadersW(request, pragma_nocache, strlenW(pragma_nocache), HTTP_ADDREQ_FLAG_ADD_IF_NEW);
     }
-    if ((request->hdr.dwFlags & INTERNET_FLAG_NO_CACHE_WRITE) && !strcmpW(request->verb, szPost))
+    if ((request->hdr.dwFlags & INTERNET_FLAG_NO_CACHE_WRITE) && strcmpW(request->verb, szGET))
     {
         static const WCHAR cache_control[] = {'C','a','c','h','e','-','C','o','n','t','r','o','l',':',
                                               ' ','n','o','-','c','a','c','h','e','\r','\n',0};
@@ -5857,9 +5882,8 @@ static DWORD HTTP_GetResponseHeaders(http_request_t *request, INT *len)
 
             /* split the status code from the status text */
             status_text = strchrW( status_code, ' ' );
-            if( !status_text )
-                goto lend;
-            *status_text++=0;
+            if( status_text )
+                *status_text++=0;
 
             request->status_code = atoiW(status_code);
 
@@ -5891,11 +5915,12 @@ static DWORD HTTP_GetResponseHeaders(http_request_t *request, INT *len)
     heap_free(request->statusText);
 
     request->version = heap_strdupW(buffer);
-    request->statusText = heap_strdupW(status_text);
+    request->statusText = heap_strdupW(status_text ? status_text : emptyW);
 
     /* Restore the spaces */
     *(status_code-1) = ' ';
-    *(status_text-1) = ' ';
+    if (status_text)
+        *(status_text-1) = ' ';
 
     /* Parse each response line */
     do
@@ -6048,7 +6073,7 @@ static DWORD HTTP_ProcessHeader(http_request_t *request, LPCWSTR field, LPCWSTR 
     {
         HTTP_DeleteCustomHeader( request, index );
 
-        if (value)
+        if (value && value[0])
         {
             HTTPHEADERW hdr;
 

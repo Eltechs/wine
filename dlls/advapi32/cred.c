@@ -571,7 +571,7 @@ static DWORD mac_write_credential(const CREDENTIALW *credential, BOOL preserve_b
 
     TRACE("adding server %s, domain %s, username %s using Keychain\n", servername, domain, username);
     status = SecKeychainAddInternetPassword(NULL, strlen(servername), servername,
-                                            strlen(domain), domain, strlen(username),
+                                            domain ? strlen(domain) : 0, domain, strlen(username),
                                             username, 0, NULL, 0,
                                             0 /* no protocol */,
                                             kSecAuthenticationTypeDefault,
@@ -583,7 +583,7 @@ static DWORD mac_write_credential(const CREDENTIALW *credential, BOOL preserve_b
         SecKeychainItemRef keychain_item;
 
         status = SecKeychainFindInternetPassword(NULL, strlen(servername), servername,
-                                                 strlen(domain), domain,
+                                                 domain ? strlen(domain) : 0, domain,
                                                  strlen(username), username,
                                                  0, NULL /* any path */, 0,
                                                  0 /* any protocol */,
@@ -746,7 +746,7 @@ static BOOL registry_credential_matches_filter(HKEY hkeyCred, LPCWSTR filter)
           debugstr_w(target_name));
 
     p = strchrW(filter, '*');
-    ret = CompareStringW(GetThreadLocale(), 0, filter,
+    ret = CompareStringW(GetThreadLocale(), NORM_IGNORECASE, filter,
                          (p && !p[1] ? p - filter : -1), target_name,
                          (p && !p[1] ? p - filter : -1)) == CSTR_EQUAL;
 
@@ -818,7 +818,7 @@ static BOOL mac_credential_matches_filter(void *data, UInt32 data_len, const WCH
     TRACE("comparing filter %s to target name %s\n", debugstr_w(filter), debugstr_w(target_name));
 
     p = strchrW(filter, '*');
-    ret = CompareStringW(GetThreadLocale(), 0, filter,
+    ret = CompareStringW(GetThreadLocale(), NORM_IGNORECASE, filter,
                          (p && !p[1] ? p - filter : -1), target_name,
                          (p && !p[1] ? p - filter : -1)) == CSTR_EQUAL;
     HeapFree(GetProcessHeap(), 0, target_name);

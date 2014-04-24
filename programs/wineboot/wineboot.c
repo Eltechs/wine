@@ -177,6 +177,7 @@ static void create_hardware_registry_keys(void)
     static const WCHAR IdentifierW[] = {'I','d','e','n','t','i','f','i','e','r',0};
     static const WCHAR ProcessorNameStringW[] = {'P','r','o','c','e','s','s','o','r','N','a','m','e','S','t','r','i','n','g',0};
     static const WCHAR SysidW[] = {'A','T',' ','c','o','m','p','a','t','i','b','l','e',0};
+    static const WCHAR ARMSysidW[] = {'A','R','M',' ','p','r','o','c','e','s','s','o','r',' ','f','a','m','i','l','y',0};
     static const WCHAR mhzKeyW[] = {'~','M','H','z',0};
     static const WCHAR VendorIdentifierW[] = {'V','e','n','d','o','r','I','d','e','n','t','i','f','i','e','r',0};
     static const WCHAR VenidIntelW[] = {'G','e','n','u','i','n','e','I','n','t','e','l',0};
@@ -184,6 +185,8 @@ static void create_hardware_registry_keys(void)
     static const WCHAR PercentDW[] = {'%','d',0};
     static const WCHAR IntelCpuDescrW[] = {'x','8','6',' ','F','a','m','i','l','y',' ','%','d',' ','M','o','d','e','l',' ','%','d',
                                            ' ','S','t','e','p','p','i','n','g',' ','%','d',0};
+    static const WCHAR ARMCpuDescrW[]  = {'A','R','M',' ','F','a','m','i','l','y',' ','7',' ','M','o','d','e','l',' ','%','X',
+                                            ' ','R','e','v','i','s','i','o','n',' ','%','d',0};
     static const WCHAR IntelCpuStringW[] = {'I','n','t','e','l','(','R',')',' ','P','e','n','t','i','u','m','(','R',')',' ','4',' ',
                                             'C','P','U',' ','2','.','4','0','G','H','z',0};
     unsigned int i;
@@ -202,7 +205,16 @@ static void create_hardware_registry_keys(void)
         memset( power_info, 0, sizeof_power_info );
 
     /*TODO: report 64bit processors properly*/
-    sprintfW( idW, IntelCpuDescrW, sci.Level, HIBYTE(sci.Revision), LOBYTE(sci.Revision) );
+    switch(sci.Architecture)
+    {
+    case PROCESSOR_ARCHITECTURE_ARM:
+        sprintfW( idW, ARMCpuDescrW, sci.Level, sci.Revision );
+        break;
+    default:
+    case PROCESSOR_ARCHITECTURE_INTEL:
+        sprintfW( idW, IntelCpuDescrW, sci.Level, HIBYTE(sci.Revision), LOBYTE(sci.Revision) );
+        break;
+    }
 
     if (RegCreateKeyExW( HKEY_LOCAL_MACHINE, SystemW, 0, NULL, REG_OPTION_VOLATILE,
                          KEY_ALL_ACCESS, NULL, &system_key, NULL ))
@@ -211,9 +223,19 @@ static void create_hardware_registry_keys(void)
         return;
     }
 
-    set_reg_value( system_key, IdentifierW, SysidW );
+    switch(sci.Architecture)
+    {
+    case PROCESSOR_ARCHITECTURE_ARM:
+        set_reg_value( system_key, IdentifierW, ARMSysidW );
+        break;
+    default:
+    case PROCESSOR_ARCHITECTURE_INTEL:
+        set_reg_value( system_key, IdentifierW, SysidW );
+        break;
+    }
 
-    if (RegCreateKeyExW( system_key, fpuW, 0, NULL, REG_OPTION_VOLATILE,
+    if (sci.Architecture == PROCESSOR_ARCHITECTURE_ARM ||
+        RegCreateKeyExW( system_key, fpuW, 0, NULL, REG_OPTION_VOLATILE,
                          KEY_ALL_ACCESS, NULL, &fpu_key, NULL ))
         fpu_key = 0;
     if (RegCreateKeyExW( system_key, cpuW, 0, NULL, REG_OPTION_VOLATILE,
@@ -230,13 +252,14 @@ static void create_hardware_registry_keys(void)
         {
             RegSetValueExW( hkey, FeatureSetW, 0, REG_DWORD, (BYTE *)&sci.FeatureSet, sizeof(DWORD) );
             set_reg_value( hkey, IdentifierW, idW );
-            /*TODO; report amd's properly*/
+            /*TODO; report ARM and AMD properly*/
             set_reg_value( hkey, ProcessorNameStringW, IntelCpuStringW );
             set_reg_value( hkey, VendorIdentifierW, VenidIntelW );
             RegSetValueExW( hkey, mhzKeyW, 0, REG_DWORD, (BYTE *)&power_info[i].MaxMhz, sizeof(DWORD) );
             RegCloseKey( hkey );
         }
-        if (!RegCreateKeyExW( fpu_key, numW, 0, NULL, REG_OPTION_VOLATILE,
+        if (sci.Architecture != PROCESSOR_ARCHITECTURE_ARM &&
+            !RegCreateKeyExW( fpu_key, numW, 0, NULL, REG_OPTION_VOLATILE,
                               KEY_ALL_ACCESS, NULL, &hkey, NULL ))
         {
             set_reg_value( hkey, IdentifierW, idW );
@@ -276,6 +299,7 @@ static void create_environment_registry_keys( void )
     static const WCHAR NumProcW[]  = {'N','U','M','B','E','R','_','O','F','_','P','R','O','C','E','S','S','O','R','S',0};
     static const WCHAR ProcArchW[] = {'P','R','O','C','E','S','S','O','R','_','A','R','C','H','I','T','E','C','T','U','R','E',0};
     static const WCHAR x86W[]      = {'x','8','6',0};
+    static const WCHAR armW[]      = {'A','R','M',0};
     static const WCHAR IA64W[]     = {'I','A','6','4',0};
     static const WCHAR AMD64W[]    = {'A','M','D','6','4',0};
     static const WCHAR ProcIdW[]   = {'P','R','O','C','E','S','S','O','R','_','I','D','E','N','T','I','F','I','E','R',0};
@@ -285,6 +309,8 @@ static void create_environment_registry_keys( void )
     static const WCHAR Percent04XW[] = {'%','0','4','x',0};
     static const WCHAR IntelCpuDescrW[]  = {'%','s',' ','F','a','m','i','l','y',' ','%','d',' ','M','o','d','e','l',' ','%','d',
                                             ' ','S','t','e','p','p','i','n','g',' ','%','d',',',' ','G','e','n','u','i','n','e','I','n','t','e','l',0};
+    static const WCHAR ARMCpuDescrW[]  = {'A','R','M',' ','F','a','m','i','l','y',' ','7',' ','M','o','d','e','l',' ','%','X',
+                                            ' ','R','e','v','i','s','i','o','n',' ','%','d',0};
 
     HKEY env_key;
     SYSTEM_CPU_INFORMATION sci;
@@ -301,14 +327,23 @@ static void create_environment_registry_keys( void )
     switch(sci.Architecture)
     {
     case PROCESSOR_ARCHITECTURE_AMD64: arch = AMD64W; break;
+    case PROCESSOR_ARCHITECTURE_ARM:   arch = armW; break;
     case PROCESSOR_ARCHITECTURE_IA64:  arch = IA64W; break;
     default:
     case PROCESSOR_ARCHITECTURE_INTEL: arch = x86W; break;
     }
     set_reg_value( env_key, ProcArchW, arch );
 
-    /* TODO: currently hardcoded Intel, add different processors */
-    sprintfW( buffer, IntelCpuDescrW, arch, sci.Level, HIBYTE(sci.Revision), LOBYTE(sci.Revision) );
+    switch(sci.Architecture)
+    {
+    case PROCESSOR_ARCHITECTURE_ARM:
+        sprintfW( buffer, ARMCpuDescrW, sci.Level, sci.Revision );
+        break;
+    default:
+    case PROCESSOR_ARCHITECTURE_INTEL:
+        sprintfW( buffer, IntelCpuDescrW, arch, sci.Level, HIBYTE(sci.Revision), LOBYTE(sci.Revision) );
+        break;
+    }
     set_reg_value( env_key, ProcIdW, buffer );
 
     sprintfW( buffer, PercentDW, sci.Level );

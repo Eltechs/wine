@@ -420,6 +420,38 @@ struct token_groups
     /* VARARG(sids,SID); */
 };
 
+enum select_op
+{
+    SELECT_NONE,
+    SELECT_WAIT,
+    SELECT_WAIT_ALL,
+    SELECT_SIGNAL_AND_WAIT,
+    SELECT_KEYED_EVENT_WAIT,
+    SELECT_KEYED_EVENT_RELEASE
+};
+
+typedef union
+{
+    enum select_op op;
+    struct
+    {
+        enum select_op  op;      /* SELECT_WAIT or SELECT_WAIT_ALL */
+        obj_handle_t    handles[MAXIMUM_WAIT_OBJECTS];
+    } wait;
+    struct
+    {
+        enum select_op  op;      /* SELECT_SIGNAL_AND_WAIT */
+        obj_handle_t    wait;
+        obj_handle_t    signal;  /* must be last in the structure so we can remove it on retries */
+    } signal_and_wait;
+    struct
+    {
+        enum select_op  op;      /* SELECT_KEYED_EVENT_WAIT or SELECT_KEYED_EVENT_RELEASE */
+        obj_handle_t    handle;
+        client_ptr_t    key;
+    } keyed_event;
+} select_op_t;
+
 enum apc_type
 {
     APC_NONE,
@@ -920,19 +952,17 @@ struct rawinput_device
 @REQ(select)
     int          flags;        /* wait flags (see below) */
     client_ptr_t cookie;       /* magic cookie to return to client */
-    obj_handle_t signal;       /* object to signal (0 if none) */
-    obj_handle_t prev_apc;     /* handle to previous APC */
     timeout_t    timeout;      /* timeout */
+    obj_handle_t prev_apc;     /* handle to previous APC */
     VARARG(result,apc_result); /* result of previous APC */
-    VARARG(handles,handles);   /* handles to select on */
+    VARARG(data,select_op);    /* operation-specific data */
 @REPLY
     timeout_t    timeout;      /* timeout converted to absolute */
     apc_call_t   call;         /* APC call arguments */
     obj_handle_t apc_handle;   /* handle to next APC */
 @END
-#define SELECT_ALL           1
-#define SELECT_ALERTABLE     2
-#define SELECT_INTERRUPTIBLE 4
+#define SELECT_ALERTABLE     1
+#define SELECT_INTERRUPTIBLE 2
 
 
 /* Create an event */
@@ -953,9 +983,35 @@ struct rawinput_device
 @END
 enum event_op { PULSE_EVENT, SET_EVENT, RESET_EVENT };
 
+@REQ(query_event)
+    obj_handle_t  handle;       /* handle to event */
+@REPLY
+    int          manual_reset;  /* manual reset event */
+    int          state;         /* current state of the event */
+@END
 
 /* Open an event */
 @REQ(open_event)
+    unsigned int access;        /* wanted access rights */
+    unsigned int attributes;    /* object attributes */
+    obj_handle_t rootdir;       /* root directory */
+    VARARG(name,unicode_str);   /* object name */
+@REPLY
+    obj_handle_t handle;        /* handle to the event */
+@END
+
+
+/* Create a keyed event */
+@REQ(create_keyed_event)
+    unsigned int access;        /* wanted access rights */
+    unsigned int attributes;    /* object attributes */
+    VARARG(objattr,object_attributes); /* object attributes */
+@REPLY
+    obj_handle_t handle;        /* handle to the event */
+@END
+
+/* Open a keyed event */
+@REQ(open_keyed_event)
     unsigned int access;        /* wanted access rights */
     unsigned int attributes;    /* object attributes */
     obj_handle_t rootdir;       /* root directory */
@@ -3306,7 +3362,7 @@ enum coords_relative
     obj_handle_t  handle;         /* port handle */
     apc_param_t   ckey;           /* completion key */
     apc_param_t   cvalue;         /* completion value */
-    unsigned int  information;    /* IO_STATUS_BLOCK Information */
+    apc_param_t   information;    /* IO_STATUS_BLOCK Information */
     unsigned int  status;         /* completion result */
 @END
 
@@ -3317,7 +3373,7 @@ enum coords_relative
 @REPLY
     apc_param_t   ckey;           /* completion key */
     apc_param_t   cvalue;         /* completion value */
-    unsigned int  information;    /* IO_STATUS_BLOCK Information */
+    apc_param_t   information;    /* IO_STATUS_BLOCK Information */
     unsigned int  status;         /* completion result */
 @END
 
@@ -3342,8 +3398,8 @@ enum coords_relative
 @REQ(add_fd_completion)
     obj_handle_t   handle;        /* async' object */
     apc_param_t    cvalue;        /* completion value */
+    apc_param_t    information;   /* IO_STATUS_BLOCK Information */
     unsigned int   status;        /* completion status */
-    unsigned int   information;   /* IO_STATUS_BLOCK Information */
 @END
 
 

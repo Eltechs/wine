@@ -39,6 +39,7 @@
 #include "winreg.h"
 #include "shlwapi.h"
 #include "msiserver.h"
+#include "shellapi.h"
 
 #include "wine/debug.h"
 #include "wine/unicode.h"
@@ -144,6 +145,7 @@ static const WCHAR szVolumeSelectCombo[] = { 'V','o','l','u','m','e','S','e','l'
 static const WCHAR szSelectionDescription[] = {'S','e','l','e','c','t','i','o','n','D','e','s','c','r','i','p','t','i','o','n',0};
 static const WCHAR szSelectionPath[] = {'S','e','l','e','c','t','i','o','n','P','a','t','h',0};
 static const WCHAR szProperty[] = {'P','r','o','p','e','r','t','y',0};
+static const WCHAR szHyperLink[] = {'H','y','p','e','r','L','i','n','k',0};
 
 /* dialog sequencing */
 
@@ -737,12 +739,13 @@ static msi_control *msi_dialog_add_control( msi_dialog *dialog,
                 MSIRECORD *rec, LPCWSTR szCls, DWORD style )
 {
     DWORD attributes;
-    LPCWSTR text, name;
+    const WCHAR *text = NULL, *name, *control_type;
     DWORD exstyle = 0;
 
     name = MSI_RecordGetString( rec, 2 );
+    control_type = MSI_RecordGetString( rec, 3 );
     attributes = MSI_RecordGetInteger( rec, 8 );
-    text = MSI_RecordGetString( rec, 10 );
+    if (strcmpW( control_type, szScrollableText )) text = MSI_RecordGetString( rec, 10 );
 
     TRACE("%s, %s, %08x, %s, %08x\n", debugstr_w(szCls), debugstr_w(name),
           attributes, debugstr_w(text), style);
@@ -1779,24 +1782,33 @@ static void msi_mask_control_change( struct msi_maskedit_info *info )
     val = msi_alloc( (info->num_chars+1)*sizeof(WCHAR) );
     for( i=0, n=0; i<info->num_groups; i++ )
     {
-        if( (info->group[i].len + n) > info->num_chars )
+        if (info->group[i].len == ~0u)
         {
-            ERR("can't fit control %d text into template\n",i);
-            break;
-        }
-        if (!msi_mask_editable(info->group[i].type))
-        {
-            for(r=0; r<info->group[i].len; r++)
-                val[n+r] = info->group[i].type;
-            val[n+r] = 0;
+            UINT len = SendMessageW( info->group[i].hwnd, WM_GETTEXTLENGTH, 0, 0 );
+            val = msi_realloc( val, (len + 1) * sizeof(WCHAR) );
+            GetWindowTextW( info->group[i].hwnd, val, len + 1 );
         }
         else
         {
-            r = GetWindowTextW( info->group[i].hwnd, &val[n], info->group[i].len+1 );
-            if( r != info->group[i].len )
+            if (info->group[i].len + n > info->num_chars)
+            {
+                ERR("can't fit control %d text into template\n",i);
                 break;
+            }
+            if (!msi_mask_editable(info->group[i].type))
+            {
+                for(r=0; r<info->group[i].len; r++)
+                    val[n+r] = info->group[i].type;
+                val[n+r] = 0;
+            }
+            else
+            {
+                r = GetWindowTextW( info->group[i].hwnd, &val[n], info->group[i].len+1 );
+                if( r != info->group[i].len )
+                    break;
+            }
+            n += r;
         }
-        n += r;
     }
 
     TRACE("%d/%d controls were good\n", i, info->num_groups);
@@ -1891,14 +1903,14 @@ msi_maskedit_set_text( struct msi_maskedit_info *info, LPCWSTR text )
 
 static struct msi_maskedit_info * msi_dialog_parse_groups( LPCWSTR mask )
 {
-    struct msi_maskedit_info * info = NULL;
+    struct msi_maskedit_info *info;
     int i = 0, n = 0, total = 0;
     LPCWSTR p;
 
     TRACE("masked control, template %s\n", debugstr_w(mask));
 
     if( !mask )
-        return info;
+        return NULL;
 
     info = msi_alloc_zero( sizeof *info );
     if( !info )
@@ -1914,7 +1926,16 @@ static struct msi_maskedit_info * msi_dialog_parse_groups( LPCWSTR mask )
     {
         /* stop at the end of the string */
         if( p[0] == 0 || p[0] == '>' )
+        {
+            if (!total)
+            {
+                /* create a group for the empty mask */
+                info->group[0].type = '&';
+                info->group[0].len = ~0u;
+                i = 1;
+            }
             break;
+        }
 
         /* count the number of the same identifier */
         for( n=0; p[n] == p[0]; n++ )
@@ -1960,9 +1981,16 @@ msi_maskedit_create_children( struct msi_maskedit_info *info, LPCWSTR font )
     {
         if (!msi_mask_editable( info->group[i].type ))
             continue;
-        wx = (info->group[i].ofs * width) / info->num_chars;
-        ww = (info->group[i].len * width) / info->num_chars;
-
+        if (info->num_chars)
+        {
+            wx = (info->group[i].ofs * width) / info->num_chars;
+            ww = (info->group[i].len * width) / info->num_chars;
+        }
+        else
+        {
+            wx = 0;
+            ww = width;
+        }
         hwnd = CreateWindowW( szEdit, NULL, style, wx, 0, ww, height,
                               info->hwnd, NULL, NULL, NULL );
         if( !hwnd )
@@ -3306,6 +3334,80 @@ static UINT msi_dialog_volumeselect_combo( msi_dialog *dialog, MSIRECORD *rec )
     return ERROR_SUCCESS;
 }
 
+static UINT msi_dialog_hyperlink_handler( msi_dialog *dialog, msi_control *control, WPARAM param )
+{
+    static const WCHAR hrefW[] = {'h','r','e','f'};
+    static const WCHAR openW[] = {'o','p','e','n',0};
+    int len, len_href = sizeof(hrefW) / sizeof(hrefW[0]);
+    const WCHAR *p, *q;
+    WCHAR quote = 0;
+    LITEM item;
+
+    item.mask     = LIF_ITEMINDEX | LIF_URL;
+    item.iLink    = 0;
+    item.szUrl[0] = 0;
+
+    SendMessageW( control->hwnd, LM_GETITEM, 0, (LPARAM)&item );
+
+    p = item.szUrl;
+    while (*p && *p != '<') p++;
+    if (!*p++) return ERROR_SUCCESS;
+    if (toupperW( *p++ ) != 'A' || !isspaceW( *p++ )) return ERROR_SUCCESS;
+    while (*p && isspaceW( *p )) p++;
+
+    len = strlenW( p );
+    if (len > len_href && !memicmpW( p, hrefW, len_href ))
+    {
+        p += len_href;
+        while (*p && isspaceW( *p )) p++;
+        if (!*p || *p++ != '=') return ERROR_SUCCESS;
+        while (*p && isspaceW( *p )) p++;
+
+        if (*p == '\"' || *p == '\'') quote = *p++;
+        q = p;
+        if (quote)
+        {
+            while (*q && *q != quote) q++;
+            if (*q != quote) return ERROR_SUCCESS;
+        }
+        else
+        {
+            while (*q && *q != '>' && !isspaceW( *q )) q++;
+            if (!*q) return ERROR_SUCCESS;
+        }
+        item.szUrl[q - item.szUrl] = 0;
+        ShellExecuteW( NULL, openW, p, NULL, NULL, SW_SHOWNORMAL );
+    }
+    return ERROR_SUCCESS;
+}
+
+static UINT msi_dialog_hyperlink( msi_dialog *dialog, MSIRECORD *rec )
+{
+    msi_control *control;
+    DWORD style = WS_CHILD | WS_TABSTOP | WS_GROUP;
+    const WCHAR *text = MSI_RecordGetString( rec, 10 );
+    int len = strlenW( text );
+    LITEM item;
+
+    control = msi_dialog_add_control( dialog, rec, WC_LINK, style );
+    if (!control)
+        return ERROR_FUNCTION_FAILED;
+
+    control->attributes = MSI_RecordGetInteger( rec, 8 );
+    control->handler    = msi_dialog_hyperlink_handler;
+
+    item.mask      = LIF_ITEMINDEX | LIF_STATE | LIF_URL;
+    item.iLink     = 0;
+    item.state     = LIS_ENABLED;
+    item.stateMask = LIS_ENABLED;
+    if (len < L_MAX_URL_LENGTH) strcpyW( item.szUrl, text );
+    else item.szUrl[0] = 0;
+
+    SendMessageW( control->hwnd, LM_SETITEM, 0, (LPARAM)&item );
+
+    return ERROR_SUCCESS;
+}
+
 static const struct control_handler msi_dialog_handler[] =
 {
     { szText, msi_dialog_text_control },
@@ -3328,6 +3430,7 @@ static const struct control_handler msi_dialog_handler[] =
     { szDirectoryList, msi_dialog_directory_list },
     { szVolumeCostList, msi_dialog_volumecost_list },
     { szVolumeSelectCombo, msi_dialog_volumeselect_combo },
+    { szHyperLink, msi_dialog_hyperlink }
 };
 
 #define NUM_CONTROL_TYPES (sizeof msi_dialog_handler/sizeof msi_dialog_handler[0])
