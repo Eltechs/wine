@@ -23,11 +23,7 @@
  *       it leaves dsound in unusable (not really open) state.
  */
 
-#include <unistd.h>
 #include <stdarg.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
 
 #define COBJMACROS
 #define NONAMELESSSTRUCT
@@ -41,7 +37,6 @@
 #include "wine/debug.h"
 #include "dsound.h"
 #include "dsound_private.h"
-#include "android.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(dsound);
 
@@ -385,8 +380,6 @@ HRESULT DSOUND_PrimaryDestroy(DirectSoundDevice *device)
 	if(device->primary && (device->primary->ref || device->primary->numIfaces))
 		WARN("Destroying primary buffer while references held (%u %u)\n", device->primary->ref, device->primary->numIfaces);
 
-        close(device->primary->android_socket);
-
 	HeapFree(GetProcessHeap(), 0, device->primary);
 	device->primary = NULL;
 
@@ -474,8 +467,6 @@ HRESULT primarybuffer_SetFormat(DirectSoundDevice *device, LPCWAVEFORMATEX passe
 	WAVEFORMATEXTENSIBLE *fmtex, *passed_fmtex = (WAVEFORMATEXTENSIBLE*)passed_fmt;
 	BOOL forced = (device->priolevel == DSSCL_WRITEPRIMARY);
 
-        DEFINE_CMD( prepare )
-
 	TRACE("(%p,%p)\n", device, passed_fmt);
 
 	if (device->priolevel == DSSCL_NORMAL) {
@@ -547,18 +538,6 @@ done:
 		HeapFree(GetProcessHeap(), 0, device->primary_pwfx);
 		device->primary_pwfx = DSOUND_CopyFormat(passed_fmt);
 	}
-
-        if ( device->primary_pwfx->wBitsPerSample == 8 )
-        {
-            cmd.type = ANDROID_TYPE_U8;
-        } else
-        {
-            cmd.type = ANDROID_TYPE_S16LE;
-        }
-        cmd.channels = device->primary_pwfx->nChannels;
-        cmd.rate = device->primary_pwfx->nSamplesPerSec;
-
-        write(device->primary->android_socket, &cmd, sizeof(cmd));
 
 out:
 	LeaveCriticalSection(&(device->mixlock));
@@ -720,9 +699,6 @@ static HRESULT WINAPI PrimaryBufferImpl_Play(IDirectSoundBuffer *iface, DWORD re
 {
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer(iface);
         DirectSoundDevice *device = This->device;
-
-        DEFINE_CMD( start )
-
 	TRACE("(%p,%08x,%08x,%08x)\n", iface, reserved1, reserved2, flags);
 
 	if (!(flags & DSBPLAY_LOOPING)) {
@@ -741,10 +717,6 @@ static HRESULT WINAPI PrimaryBufferImpl_Play(IDirectSoundBuffer *iface, DWORD re
 	LeaveCriticalSection(&(device->mixlock));
 	/* **** */
 
-        write(This->android_socket, &cmd, sizeof(cmd));
-
-        This->start_time = GetTickCount();
-
 	return DS_OK;
 }
 
@@ -752,9 +724,6 @@ static HRESULT WINAPI PrimaryBufferImpl_Stop(IDirectSoundBuffer *iface)
 {
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer(iface);
         DirectSoundDevice *device = This->device;
-
-        DEFINE_CMD( stop )
-
 	TRACE("(%p)\n", iface);
 
 	/* **** */
@@ -764,8 +733,6 @@ static HRESULT WINAPI PrimaryBufferImpl_Stop(IDirectSoundBuffer *iface)
 		device->state = STATE_STOPPING;
 	else if (device->state == STATE_STARTING)
 		device->state = STATE_STOPPED;
-
-        write(This->android_socket, &cmd, sizeof(cmd));
 
 	LeaveCriticalSection(&(device->mixlock));
 	/* **** */
@@ -817,44 +784,17 @@ static HRESULT WINAPI PrimaryBufferImpl_GetCurrentPosition(IDirectSoundBuffer *i
 	HRESULT	hres;
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer(iface);
         DirectSoundDevice *device = This->device;
-
-        DWORD mixpos;
-
-//        DEFINE_CMD( pointer )
-
 	TRACE("(%p,%p,%p)\n", iface, playpos, writepos);
 
 	/* **** */
 	EnterCriticalSection(&(device->mixlock));
 
-/*	hres = DSOUND_PrimaryGetPosition(device, playpos, writepos);
+	hres = DSOUND_PrimaryGetPosition(device, playpos, writepos);
 	if (hres != DS_OK) {
 		WARN("DSOUND_PrimaryGetPosition failed\n");
 		LeaveCriticalSection(&(device->mixlock));
 		return hres;
-	}*/
-
-//        write(This->android_socket, &cmd, sizeof(cmd));
-//        read(This->android_socket, &mixpos, sizeof(mixpos));
-
-        mixpos = (GetTickCount() - This->start_time) * (This->pwfx->nSamplesPerSec / 1000);
-        mixpos += This->stop_offset;
-
-        if ( This->pwfx->nChannels == 2 )
-        {
-            mixpos = mixpos*2;
-        }
-        if ( This->pwfx->wBitsPerSample == 16 )
-        {
-            mixpos = mixpos*2;
-        }
-
- 	if (playpos)
- 		*playpos = mixpos;
-
-	if (writepos)
-		*writepos = (mixpos + device->in_mmdev_bytes) % device->buflen;
-
+	}
 	if (writepos) {
 		if (device->state != STATE_STOPPED)
 			/* apply the documented 10ms lead to writepos */
@@ -1130,11 +1070,6 @@ static HRESULT WINAPI PrimaryBufferImpl_Unlock(IDirectSoundBuffer *iface, void *
 {
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer(iface);
         DirectSoundDevice *device = This->device;
-
-        struct iovec writebufs[3];
-
-        DEFINE_CMD( write )
-
 	TRACE("(%p,%p,%d,%p,%d)\n", iface, p1, x1, p2, x2);
 
 	if (device->priolevel != DSSCL_WRITEPRIMARY) {
@@ -1145,18 +1080,6 @@ static HRESULT WINAPI PrimaryBufferImpl_Unlock(IDirectSoundBuffer *iface, void *
 	if ((p1 && ((BYTE*)p1 < device->buffer || (BYTE*)p1 >= device->buffer + device->buflen)) ||
 	    (p2 && ((BYTE*)p2 < device->buffer || (BYTE*)p2 >= device->buffer + device->buflen)))
 		return DSERR_INVALIDPARAM;
-
-    writebufs[0].iov_base = &cmd;
-    writebufs[0].iov_len = sizeof(cmd);
-
-    writebufs[1].iov_base = p1;
-    writebufs[1].iov_len = x1;
-    writebufs[2].iov_base = p2;
-    writebufs[2].iov_len = x2;
-
-    cmd.len += writebufs[1].iov_len + writebufs[2].iov_len;
-
-    writev(This->android_socket, writebufs, 3);
 
 	return DS_OK;
 }
@@ -1307,11 +1230,6 @@ static const IDirectSoundBufferVtbl dspbvt =
 HRESULT primarybuffer_create(DirectSoundDevice *device, IDirectSoundBufferImpl **ppdsb,
 	const DSBUFFERDESC *dsbd)
 {
-    struct sockaddr_in addr;
-    int flag = 1;
-
-    const char *port = getenv(ANDROID_SOUND_SERVER_PORT_ARGUMENT_NAME);
-
 	IDirectSoundBufferImpl *dsb;
 	TRACE("%p,%p,%p)\n",device,ppdsb,dsbd);
 
@@ -1338,13 +1256,6 @@ HRESULT primarybuffer_create(DirectSoundDevice *device, IDirectSoundBufferImpl *
         dsb->IDirectSound3DListener_iface.lpVtbl = &ds3dlvt;
         dsb->IKsPropertySet_iface.lpVtbl = &iksbvt;
 	dsb->dsbd = *dsbd;
-
-    dsb->android_socket = socket(AF_INET, SOCK_STREAM, 0);
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons( atoi(port) );
-    addr.sin_addr.s_addr = inet_addr( "127.0.0.1" );
-    connect( dsb->android_socket, (struct sockaddr *)&addr, sizeof( addr));
-    setsockopt( dsb->android_socket, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
 
         /* IDirectSound3DListener */
         device->ds3dl.dwSize = sizeof(DS3DLISTENER);

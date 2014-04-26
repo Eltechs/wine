@@ -149,9 +149,6 @@ struct IDirectSoundBufferImpl
     DWORD                       writelead,buflen;
     DWORD                       nAvgBytesPerSec;
     DWORD                       freq;
-    DWORD                       android_socket;
-    DWORD                       start_time;
-    DWORD                       stop_offset;
     DSVOLUMEPAN                 volpan;
     DSBUFFERDESC                dsbd;
     /* used for frequency conversion (PerfectPitch) */

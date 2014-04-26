@@ -19,12 +19,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <unistd.h>
 #include <stdarg.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
-
 
 #define NONAMELESSSTRUCT
 #define NONAMELESSUNION
@@ -38,7 +33,6 @@
 #include "dsound.h"
 #include "dsound_private.h"
 #include "dsconf.h"
-#include "android.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(dsound);
 
@@ -275,8 +269,6 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Play(IDirectSoundBuffer8 *iface, DW
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer8(iface);
 	HRESULT hres = DS_OK;
 
-        DEFINE_CMD( start )
-
 	TRACE("(%p,%08x,%08x,%08x)\n",This,reserved1,reserved2,flags);
 
 	/* **** */
@@ -289,10 +281,6 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Play(IDirectSoundBuffer8 *iface, DW
 	} else if (This->state == STATE_STOPPING)
 		This->state = STATE_PLAYING;
 
-        write(This->android_socket, &cmd, sizeof(cmd));
-
-        This->start_time = GetTickCount();
-
 	RtlReleaseResource(&This->lock);
 	/* **** */
 
@@ -303,8 +291,6 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Stop(IDirectSoundBuffer8 *iface)
 {
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer8(iface);
 	HRESULT hres = DS_OK;
-
-        DEFINE_CMD( drain )
 
 	TRACE("(%p)\n",This);
 
@@ -318,10 +304,6 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Stop(IDirectSoundBuffer8 *iface)
 		This->state = STATE_STOPPED;
 		DSOUND_CheckEvent(This, 0, 0);
 	}
-
-        write(This->android_socket, &cmd, sizeof(cmd));
-
-        This->stop_offset = (GetTickCount() - This->start_time) * (This->pwfx->nSamplesPerSec / 1000);
 
 	RtlReleaseResource(&This->lock);
 	/* **** */
@@ -370,32 +352,15 @@ static HRESULT WINAPI IDirectSoundBufferImpl_GetCurrentPosition(IDirectSoundBuff
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer8(iface);
 	DWORD pos;
 
-//        DEFINE_CMD( pointer )
-
 	TRACE("(%p,%p,%p)\n",This,playpos,writepos);
 
 	RtlAcquireResourceShared(&This->lock, TRUE);
 
-//	pos = This->sec_mixpos;
- 
-//        write(This->android_socket, &cmd, sizeof(cmd));
-//        read(This->android_socket, &pos, sizeof(pos));
-
-        pos = (GetTickCount() - This->start_time) * (This->pwfx->nSamplesPerSec / 1000);
-        pos += This->stop_offset;
-
-        if ( This->pwfx->nChannels == 2 )
-        {
-            pos = pos*2;
-        }
-        if ( This->pwfx->wBitsPerSample == 16 )
-        {
-            pos = pos*2;
-        }
+	pos = This->sec_mixpos;
 
 	/* sanity */
 	if (pos >= This->buflen){
-//		FIXME("Bad play position. playpos: %d, buflen: %d\n", pos, This->buflen);
+		FIXME("Bad play position. playpos: %d, buflen: %d\n", pos, This->buflen);
 		pos %= This->buflen;
 	}
 
@@ -568,8 +533,6 @@ static HRESULT WINAPI IDirectSoundBufferImpl_SetCurrentPosition(IDirectSoundBuff
 	newpos -= newpos%This->pwfx->nBlockAlign;
 	This->sec_mixpos = newpos;
 
-        This->stop_offset = newpos;
-
 	/* at this point, do not attempt to reset buffers, mess with primary mix position,
            or anything like that to reduce latency. The data already prebuffered cannot be changed */
 
@@ -639,10 +602,6 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Unlock(IDirectSoundBuffer8 *iface, 
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer8(iface), *iter;
 	HRESULT hres = DS_OK;
 
-        struct iovec writebufs[3];
-
-        DEFINE_CMD( write )
-
 	TRACE("(%p,%p,%d,%p,%d)\n", This,p1,x1,p2,x2);
 
 	if (!p2)
@@ -667,18 +626,6 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Unlock(IDirectSoundBuffer8 *iface, 
 		}
 		RtlReleaseResource(&This->device->buffer_list_lock);
 	}
-
-    writebufs[0].iov_base = &cmd;
-    writebufs[0].iov_len = sizeof(cmd);
-
-    writebufs[1].iov_base = p1;
-    writebufs[1].iov_len = x1;
-    writebufs[2].iov_base = p2;
-    writebufs[2].iov_len = x2;
-
-    cmd.len += writebufs[1].iov_len + writebufs[2].iov_len;
-
-    writev(This->android_socket, writebufs, 3);
 
 	return hres;
 }
@@ -873,18 +820,10 @@ HRESULT IDirectSoundBufferImpl_Create(
 	IDirectSoundBufferImpl **pdsb,
 	LPCDSBUFFERDESC dsbd)
 {
-    struct sockaddr_in addr;
-    int flag = 1;
-
-    const char *port = getenv(ANDROID_SOUND_SERVER_PORT_ARGUMENT_NAME);
-
 	IDirectSoundBufferImpl *dsb;
 	LPWAVEFORMATEX wfex = dsbd->lpwfxFormat;
 	HRESULT err = DS_OK;
 	DWORD capf = 0;
-
-        DEFINE_CMD( prepare )
-
 	TRACE("(%p,%p,%p)\n",device,pdsb,dsbd);
 
 	if (dsbd->dwBufferBytes < DSBSIZE_MIN || dsbd->dwBufferBytes > DSBSIZE_MAX) {
@@ -981,27 +920,6 @@ HRESULT IDirectSoundBufferImpl_Create(
 	/* calculate fragment size and write lead */
 	DSOUND_RecalcFormat(dsb);
 
-    dsb->android_socket = socket(AF_INET, SOCK_STREAM, 0);
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons( atoi(port) );
-    addr.sin_addr.s_addr = inet_addr( "127.0.0.1" );
-    connect( dsb->android_socket, (struct sockaddr *)&addr, sizeof( addr));
-    setsockopt( dsb->android_socket, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
-
-    dsb->stop_offset = 0;
-
-    if ( dsb->pwfx->wBitsPerSample == 8 )
-    {
-        cmd.type = ANDROID_TYPE_U8;
-    } else
-    {
-        cmd.type = ANDROID_TYPE_S16LE;
-    }
-    cmd.channels = dsb->pwfx->nChannels;
-    cmd.rate = dsb->pwfx->nSamplesPerSec;
-
-    write(dsb->android_socket, &cmd, sizeof(cmd));
-
 	if (dsb->dsbd.dwFlags & DSBCAPS_CTRL3D) {
 		dsb->ds3db_ds3db.dwSize = sizeof(DS3DBUFFER);
 		dsb->ds3db_ds3db.vPosition.x = 0.0;
@@ -1054,8 +972,6 @@ void secondarybuffer_destroy(IDirectSoundBufferImpl *This)
 
     DirectSoundDevice_RemoveBuffer(This->device, This);
     RtlDeleteResource(&This->lock);
-
-    close(This->android_socket);
 
     This->buffer->ref--;
     list_remove(&This->entry);

@@ -870,12 +870,10 @@ HRESULT DirectSoundDevice_Initialize(DirectSoundDevice ** ppDevice, LPCGUID lpcG
 
     hr = DSOUND_PrimaryCreate(device);
     if (hr == DS_OK) {
-//        device->thread = CreateThread(0, 0, DSOUND_mixthread, device, 0, 0);
-//        SetThreadPriority(device->thread, THREAD_PRIORITY_TIME_CRITICAL);
+        device->thread = CreateThread(0, 0, DSOUND_mixthread, device, 0, 0);
+        SetThreadPriority(device->thread, THREAD_PRIORITY_TIME_CRITICAL);
     } else
         WARN("DSOUND_PrimaryCreate failed: %08x\n", hr);
-
-    device->thread = 0;
 
     *ppDevice = device;
     list_add_tail(&DSOUND_renderers, &device->entry);
