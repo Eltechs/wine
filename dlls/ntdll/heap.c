@@ -71,7 +71,8 @@ typedef struct
     struct list           entry;      /* entry in heap large blocks list */
     SIZE_T                data_size;  /* size of user data */
     SIZE_T                block_size; /* total size of virtual memory block */
-    DWORD                 pad[2];     /* padding to ensure 16-byte alignment of data */
+    DWORD                 allocated;  /* allocated to user or free? */
+    DWORD                 tick_count; /* GetTickCount when allocated */
     DWORD                 size;       /* fields for compatibility with normal arenas */
     DWORD                 magic;      /* these must remain at the end of the structure */
 } ARENA_LARGE;
@@ -716,20 +717,64 @@ static void *allocate_large_block( HEAP *heap, DWORD flags, SIZE_T size )
     LPVOID address = NULL;
 
     if (block_size < size) return NULL;  /* overflow */
+
+    ARENA_LARGE *arena_iter = NULL, *arena_next_iter = NULL;
+
+    LIST_FOR_EACH_ENTRY_SAFE( arena_iter, arena_next_iter, &heap->large_list, ARENA_LARGE, entry )
+    {
+        if ( arena_iter->allocated == FALSE )
+        {
+            if (arena_iter->size != ARENA_LARGE_SIZE
+                || arena_iter->magic != ARENA_LARGE_MAGIC )
+            {
+                ERR("Invalid arena_iter %p\n", arena_iter);
+            }
+
+            if ( arena_iter->block_size >= block_size )
+            {
+                arena_iter->allocated = TRUE;
+                arena_iter->tick_count = NtGetTickCount();
+                arena->data_size = size;
+
+                initialize_block( (char*)(arena_iter + 1),
+                                  arena_iter->data_size,
+                                  arena_iter->block_size - sizeof(*arena_iter) - arena_iter->data_size,
+                                  flags);
+                notify_alloc( arena_iter + 1, arena_iter->data_size, flags & HEAP_ZERO_MEMORY );
+
+                return arena_iter + 1;
+            } else if ( NtGetTickCount() - arena_iter->tick_count > 1000 ) // allocated more than 1 second ago
+            {
+                notify_free( (void*)(arena_iter + 1) );
+                list_remove( &arena_iter->entry );
+
+                LPVOID arena_iter_address = arena_iter;
+                SIZE_T arena_iter_area_size = 0;
+
+                NtFreeVirtualMemory( NtCurrentProcess(), &arena_iter_address, &arena_iter_area_size, MEM_RELEASE);
+            }
+        }
+    }
+
     if (NtAllocateVirtualMemory( NtCurrentProcess(), &address, 5,
                                  &block_size, MEM_COMMIT, get_protection_type( flags ) ))
     {
         WARN("Could not allocate block for %08lx bytes\n", size );
         return NULL;
     }
+
     arena = address;
     arena->data_size = size;
     arena->block_size = block_size;
+    arena->allocated = TRUE;
+    arena->tick_count = NtGetTickCount();
     arena->size = ARENA_LARGE_SIZE;
     arena->magic = ARENA_LARGE_MAGIC;
+
     mark_block_tail( (char *)(arena + 1) + size, block_size - sizeof(*arena) - size, flags );
     list_add_tail( &heap->large_list, &arena->entry );
     notify_alloc( arena + 1, size, flags & HEAP_ZERO_MEMORY );
+
     return arena + 1;
 }
 
@@ -743,8 +788,16 @@ static void free_large_block( HEAP *heap, DWORD flags, void *ptr )
     LPVOID address = arena;
     SIZE_T size = 0;
 
-    list_remove( &arena->entry );
-    NtFreeVirtualMemory( NtCurrentProcess(), &address, &size, MEM_RELEASE );
+    if ( arena->block_size >= 16 * 1048576 /* 16 MB */ )
+    {
+        notify_free( ptr );
+
+        list_remove( &arena->entry );
+        NtFreeVirtualMemory( NtCurrentProcess(), &address, &size, MEM_RELEASE );
+    } else
+    {
+        arena->allocated = FALSE;
+    }
 }
 
 
@@ -781,7 +834,6 @@ static void *realloc_large_block( HEAP *heap, DWORD flags, void *ptr, SIZE_T siz
     }
     memcpy( new_ptr, ptr, arena->data_size );
     free_large_block( heap, flags, ptr );
-    notify_free( ptr );
     return new_ptr;
 }
 
@@ -1757,9 +1809,6 @@ BOOLEAN WINAPI RtlFreeHeap( HANDLE heap, ULONG flags, PVOID ptr )
     flags &= HEAP_NO_SERIALIZE;
     flags |= heapPtr->flags;
     if (!(flags & HEAP_NO_SERIALIZE)) RtlEnterCriticalSection( &heapPtr->critSection );
-
-    /* Inform valgrind we are trying to free memory, so it can throw up an error message */
-    notify_free( ptr );
 
     /* Some sanity checks */
     pInUse  = (ARENA_INUSE *)ptr - 1;
