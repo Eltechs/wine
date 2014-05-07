@@ -2006,7 +2006,14 @@ static void gdi_surface_realize_palette(struct wined3d_surface *surface)
      * Red Alert call SetEntries a lot to implement fading. */
     /* Tell the swapchain to update the screen. */
     if (surface->swapchain && surface == surface->swapchain->front_buffer)
+    {
         x11_copy_to_screen(surface->swapchain, NULL);
+
+        struct timespec ts;
+        ts.tv_sec = 0;
+        ts.tv_nsec = 1000000;
+        nanosleep( &ts, 0);
+    }
 }
 
 static void gdi_surface_map(struct wined3d_surface *surface, const RECT *rect, DWORD flags)
