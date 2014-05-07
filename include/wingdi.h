@@ -416,6 +416,7 @@ DECL_WINELIB_TYPE_AW(LOGCOLORSPACE)
 #define DSTINVERT       0x550009
 #define BLACKNESS       0x000042
 #define WHITENESS       0xff0062
+#define ROP_NOP         0xaa0000
 
   /* StretchBlt() modes */
 #define BLACKONWHITE         1
