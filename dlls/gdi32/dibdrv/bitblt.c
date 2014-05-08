@@ -710,6 +710,11 @@ static DWORD create_tmp_dib( const dib_info *copy, int width, int height, dib_in
 static DWORD execute_rop( dibdrv_physdev *pdev, const RECT *dst_rect, dib_info *src,
                           const RECT *src_rect, const struct clipped_rects *clipped_rects, DWORD rop )
 {
+    if ( rop == ROP_NOP )
+    {
+        return;
+    }
+
     dib_info *dibs[3], *result = src, tmp;
     RECT rects[3];
     int width  = dst_rect->right - dst_rect->left;

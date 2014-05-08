@@ -734,7 +734,7 @@ static void *allocate_large_block( HEAP *heap, DWORD flags, SIZE_T size )
             {
                 arena_iter->allocated = TRUE;
                 arena_iter->tick_count = NtGetTickCount();
-                arena->data_size = size;
+                arena_iter->data_size = size;
 
                 initialize_block( (char*)(arena_iter + 1),
                                   arena_iter->data_size,
@@ -745,7 +745,6 @@ static void *allocate_large_block( HEAP *heap, DWORD flags, SIZE_T size )
                 return arena_iter + 1;
             } else if ( NtGetTickCount() - arena_iter->tick_count > 1000 ) // allocated more than 1 second ago
             {
-                notify_free( (void*)(arena_iter + 1) );
                 list_remove( &arena_iter->entry );
 
                 LPVOID arena_iter_address = arena_iter;
@@ -790,8 +789,6 @@ static void free_large_block( HEAP *heap, DWORD flags, void *ptr )
 
     if ( arena->block_size >= 16 * 1048576 /* 16 MB */ )
     {
-        notify_free( ptr );
-
         list_remove( &arena->entry );
         NtFreeVirtualMemory( NtCurrentProcess(), &address, &size, MEM_RELEASE );
     } else
@@ -834,6 +831,7 @@ static void *realloc_large_block( HEAP *heap, DWORD flags, void *ptr, SIZE_T siz
     }
     memcpy( new_ptr, ptr, arena->data_size );
     free_large_block( heap, flags, ptr );
+    notify_free( ptr );
     return new_ptr;
 }
 
@@ -1809,6 +1807,9 @@ BOOLEAN WINAPI RtlFreeHeap( HANDLE heap, ULONG flags, PVOID ptr )
     flags &= HEAP_NO_SERIALIZE;
     flags |= heapPtr->flags;
     if (!(flags & HEAP_NO_SERIALIZE)) RtlEnterCriticalSection( &heapPtr->critSection );
+
+    /* Inform valgrind we are trying to free memory, so it can throw up an error message */
+    notify_free( ptr );
 
     /* Some sanity checks */
     pInUse  = (ARENA_INUSE *)ptr - 1;

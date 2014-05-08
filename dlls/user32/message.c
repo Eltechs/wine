@@ -3771,8 +3771,10 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetMessageW( MSG *msg, HWND hwnd, UINT first, UINT
 
     while (!peek_message( msg, hwnd, first, last, PM_REMOVE | (mask << 16), mask ))
     {
-        flush_window_surfaces( TRUE );
-        wow_handlers.wait_message( 1, &server_queue, INFINITE, mask, 0 );
+        while ( wow_handlers.wait_message( 1, &server_queue, 30 /* milliseconds */, mask, 0 ) == WAIT_TIMEOUT )
+        {
+            flush_window_surfaces( TRUE );
+        }
     }
     check_for_driver_events( msg->message );
 

@@ -20,6 +20,8 @@
 
 #include "config.h"
 
+#include <assert.h>
+
 #include <stdarg.h>
 #include <limits.h>
 #include <math.h>
@@ -271,10 +273,14 @@ BOOL nulldrv_StretchBlt( PHYSDEV dst_dev, struct bitblt_coords *dst,
     if (err == ERROR_BAD_FORMAT)
     {
         DWORD dst_colors = dst_info->bmiHeader.biClrUsed;
+        BOOL useGenericConversion = FALSE;
 
         /* 1-bpp source without a color table uses the destination DC colors */
         if (src_info->bmiHeader.biBitCount == 1 && !src_info->bmiHeader.biClrUsed)
+        {
             get_mono_dc_colors( dst_dev->hdc, src_info, 2 );
+            useGenericConversion = TRUE;
+        }
 
         if (dst_info->bmiHeader.biBitCount == 1 && !dst_colors)
         {
@@ -285,13 +291,75 @@ BOOL nulldrv_StretchBlt( PHYSDEV dst_dev, struct bitblt_coords *dst,
                 get_mono_dc_colors( src_dev->hdc, dst_info, 1 );
             else
                 get_mono_dc_colors( src_dev->hdc, dst_info, 2 );
+
+            useGenericConversion = TRUE;
         }
 
-        if (!(err = convert_bits( src_info, src, dst_info, &bits )))
+        if ( !useGenericConversion
+             && rop == SRCCOPY
+             && dst->x == 0 && dst->y == 0
+             && src->x == 0 && src->y == 0
+             && dst->log_x == 0 && dst->log_y == 0
+             && src->log_x == 0 && src->log_y == 0
+             && dst->width == src->width
+             && dst->height == src->height
+             && dst->log_width == src->log_width
+             && dst->log_height == src->log_height
+             && dst->visrect.left == src->visrect.left
+             && dst->visrect.top == src->visrect.top
+             && dst->visrect.right == src->visrect.right
+             && dst->visrect.bottom == src->visrect.bottom
+             && dst->visrect.left == 0
+             && dst->visrect.top == 0
+             && dst->visrect.right == dst->width
+             && dst->visrect.bottom == dst->height )
         {
-            /* get rid of the fake destination table */
-            dst_info->bmiHeader.biClrUsed = dst_colors;
-            err = dst_dev->funcs->pPutImage( dst_dev, 0, dst_info, &bits, src, dst, rop );
+
+            char dst_info_buffer_direct_convert[FIELD_OFFSET( BITMAPINFO, bmiColors[256] )];
+            BITMAPINFO* dst_info_direct_convert = (BITMAPINFO*)dst_info_buffer_direct_convert;
+            struct gdi_image_bits dst_bits_direct_convert;
+            struct bitblt_coords dst_coords_direct_convert;
+
+            err = dst_dev->funcs->pGetImage( dst_dev,
+                                             dst_info_direct_convert,
+                                             &dst_bits_direct_convert,
+                                             &dst_coords_direct_convert);
+            assert( err == ERROR_SUCCESS );
+
+            if ( dst_info_direct_convert->bmiHeader.biWidth == dst->width
+                 && ( dst_info_direct_convert->bmiHeader.biHeight == dst->height
+                      || dst_info_direct_convert->bmiHeader.biHeight == -dst->height ) )
+            {
+                err = convert_bitmapinfo( src_info, bits.ptr, src, dst_info_direct_convert, dst_bits_direct_convert.ptr);
+
+                assert( err == ERROR_SUCCESS );
+
+                dst_info_direct_convert->bmiHeader.biClrUsed = dst_colors;
+                err = dst_dev->funcs->pPutImage( dst_dev, 0, dst_info_direct_convert, &bits, src, dst, ROP_NOP );
+
+                assert( err == ERROR_SUCCESS );
+            } else
+            {
+                useGenericConversion = TRUE;
+            }
+
+            if ( dst_bits_direct_convert.free != NULL )
+            {
+                dst_bits_direct_convert.free( &dst_bits_direct_convert);
+            }
+        } else
+        {
+            useGenericConversion = TRUE;
+        }
+        
+        if ( useGenericConversion )
+        {
+            if (!(err = convert_bits( src_info, src, dst_info, &bits )))
+            {
+                /* get rid of the fake destination table */
+                dst_info->bmiHeader.biClrUsed = dst_colors;
+                err = dst_dev->funcs->pPutImage( dst_dev, 0, dst_info, &bits, src, dst, rop );
+            }
         }
     }
 

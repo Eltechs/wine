@@ -606,6 +606,24 @@ done:
     LeaveCriticalSection( &surfaces_section );
 }
 
+/**
+ * Flush pending output from all window surfaces.
+ * Difference from flush_window_surfaces:
+ *   - external visibility of interface to other wine libs;
+ *   - no "idle" logic.
+ */
+VOID CDECL __wine_flush_window_surfaces( VOID)
+{
+    struct window_surface *surface;
+
+    EnterCriticalSection( &surfaces_section );
+
+    LIST_FOR_EACH_ENTRY( surface, &window_surfaces, struct window_surface, entry )
+        surface->funcs->flush( surface );
+
+    LeaveCriticalSection( &surfaces_section );
+
+}
 
 /***********************************************************************
  *           WIN_GetPtr
