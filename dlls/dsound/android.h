@@ -19,7 +19,7 @@ typedef struct
     uint16_t bits_per_sample;
     uint32_t sample_rate;
     uint32_t n_samples;
-    uint32_t current_pos;
+    volatile uint32_t current_pos;
 
     uint32_t padding[11];
 

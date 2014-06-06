@@ -850,6 +850,11 @@ static HRESULT check_bufferdesc(LPCDSBUFFERDESC dsbd)
 		return DSERR_INVALIDPARAM; /* FIXME: which error? */
 	}
 
+	if (wfex->wFormatTag != WAVE_FORMAT_PCM) {
+		WARN("dsdb->wfex->wFormatTag other than WAVE_FORMAT_PCM is not supported\n");
+		return DSERR_UNSUPPORTED;
+	}
+
 	if ( 0 != (wfex->wBitsPerSample % 8) )
 		return DSERR_INVALIDPARAM;
 
