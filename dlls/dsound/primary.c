@@ -385,7 +385,9 @@ HRESULT DSOUND_PrimaryDestroy(DirectSoundDevice *device)
 	if(device->primary && (device->primary->ref || device->primary->numIfaces))
 		WARN("Destroying primary buffer while references held (%u %u)\n", device->primary->ref, device->primary->numIfaces);
 
+#if 0
         close(device->primary->android_socket);
+#endif
 
 	HeapFree(GetProcessHeap(), 0, device->primary);
 	device->primary = NULL;
@@ -474,7 +476,9 @@ HRESULT primarybuffer_SetFormat(DirectSoundDevice *device, LPCWAVEFORMATEX passe
 	WAVEFORMATEXTENSIBLE *fmtex, *passed_fmtex = (WAVEFORMATEXTENSIBLE*)passed_fmt;
 	BOOL forced = (device->priolevel == DSSCL_WRITEPRIMARY);
 
+#if 0
         DEFINE_CMD( prepare )
+#endif
 
 	TRACE("(%p,%p)\n", device, passed_fmt);
 
@@ -548,6 +552,7 @@ done:
 		device->primary_pwfx = DSOUND_CopyFormat(passed_fmt);
 	}
 
+#if 0
         if ( device->primary_pwfx->wBitsPerSample == 8 )
         {
             cmd.type = ANDROID_TYPE_U8;
@@ -559,6 +564,7 @@ done:
         cmd.rate = device->primary_pwfx->nSamplesPerSec;
 
         write(device->primary->android_socket, &cmd, sizeof(cmd));
+#endif
 
 out:
 	LeaveCriticalSection(&(device->mixlock));
@@ -721,7 +727,9 @@ static HRESULT WINAPI PrimaryBufferImpl_Play(IDirectSoundBuffer *iface, DWORD re
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer(iface);
         DirectSoundDevice *device = This->device;
 
+#if 0
         DEFINE_CMD( start )
+#endif
 
 	TRACE("(%p,%08x,%08x,%08x)\n", iface, reserved1, reserved2, flags);
 
@@ -741,9 +749,9 @@ static HRESULT WINAPI PrimaryBufferImpl_Play(IDirectSoundBuffer *iface, DWORD re
 	LeaveCriticalSection(&(device->mixlock));
 	/* **** */
 
+#if 0
         write(This->android_socket, &cmd, sizeof(cmd));
-
-        This->start_time = GetTickCount();
+#endif
 
 	return DS_OK;
 }
@@ -753,7 +761,9 @@ static HRESULT WINAPI PrimaryBufferImpl_Stop(IDirectSoundBuffer *iface)
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer(iface);
         DirectSoundDevice *device = This->device;
 
+#if 0
         DEFINE_CMD( stop )
+#endif
 
 	TRACE("(%p)\n", iface);
 
@@ -765,7 +775,9 @@ static HRESULT WINAPI PrimaryBufferImpl_Stop(IDirectSoundBuffer *iface)
 	else if (device->state == STATE_STARTING)
 		device->state = STATE_STOPPED;
 
+#if 0
         write(This->android_socket, &cmd, sizeof(cmd));
+#endif
 
 	LeaveCriticalSection(&(device->mixlock));
 	/* **** */
@@ -814,6 +826,9 @@ static ULONG WINAPI PrimaryBufferImpl_Release(IDirectSoundBuffer *iface)
 static HRESULT WINAPI PrimaryBufferImpl_GetCurrentPosition(IDirectSoundBuffer *iface,
         DWORD *playpos, DWORD *writepos)
 {
+	ERR("PrimaryBufferImpl_GetCurrentPosition() is not supported");
+	abort();
+
 	HRESULT	hres;
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer(iface);
         DirectSoundDevice *device = This->device;
@@ -837,6 +852,8 @@ static HRESULT WINAPI PrimaryBufferImpl_GetCurrentPosition(IDirectSoundBuffer *i
 //        write(This->android_socket, &cmd, sizeof(cmd));
 //        read(This->android_socket, &mixpos, sizeof(mixpos));
 
+	mixpos = 0;
+#if 0
         mixpos = (GetTickCount() - This->start_time) * (This->pwfx->nSamplesPerSec / 1000);
         mixpos += This->stop_offset;
 
@@ -848,6 +865,7 @@ static HRESULT WINAPI PrimaryBufferImpl_GetCurrentPosition(IDirectSoundBuffer *i
         {
             mixpos = mixpos*2;
         }
+#endif
 
  	if (playpos)
  		*playpos = mixpos;
@@ -927,6 +945,9 @@ static HRESULT WINAPI PrimaryBufferImpl_Lock(IDirectSoundBuffer *iface, DWORD wr
         DWORD writebytes, void **lplpaudioptr1, DWORD *audiobytes1, void **lplpaudioptr2,
         DWORD *audiobytes2, DWORD flags)
 {
+	ERR("PrimaryBufferImpl_Lock() is not supported");
+	abort();
+
 	HRESULT hres;
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer(iface);
         DirectSoundDevice *device = This->device;
@@ -1128,12 +1149,17 @@ static HRESULT WINAPI PrimaryBufferImpl_GetPan(IDirectSoundBuffer *iface, LONG *
 static HRESULT WINAPI PrimaryBufferImpl_Unlock(IDirectSoundBuffer *iface, void *p1, DWORD x1,
         void *p2, DWORD x2)
 {
+	ERR("PrimaryBufferImpl_Unlock() is not supported");
+	abort();
+
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer(iface);
         DirectSoundDevice *device = This->device;
 
+#if 0
         struct iovec writebufs[3];
 
         DEFINE_CMD( write )
+#endif
 
 	TRACE("(%p,%p,%d,%p,%d)\n", iface, p1, x1, p2, x2);
 
@@ -1146,6 +1172,7 @@ static HRESULT WINAPI PrimaryBufferImpl_Unlock(IDirectSoundBuffer *iface, void *
 	    (p2 && ((BYTE*)p2 < device->buffer || (BYTE*)p2 >= device->buffer + device->buflen)))
 		return DSERR_INVALIDPARAM;
 
+#if 0
     writebufs[0].iov_base = &cmd;
     writebufs[0].iov_len = sizeof(cmd);
 
@@ -1157,6 +1184,7 @@ static HRESULT WINAPI PrimaryBufferImpl_Unlock(IDirectSoundBuffer *iface, void *
     cmd.len += writebufs[1].iov_len + writebufs[2].iov_len;
 
     writev(This->android_socket, writebufs, 3);
+#endif
 
 	return DS_OK;
 }
@@ -1307,10 +1335,12 @@ static const IDirectSoundBufferVtbl dspbvt =
 HRESULT primarybuffer_create(DirectSoundDevice *device, IDirectSoundBufferImpl **ppdsb,
 	const DSBUFFERDESC *dsbd)
 {
+#if 0
     struct sockaddr_in addr;
     int flag = 1;
 
     const char *port = getenv(ANDROID_SOUND_SERVER_PORT_ARGUMENT_NAME);
+#endif
 
 	IDirectSoundBufferImpl *dsb;
 	TRACE("%p,%p,%p)\n",device,ppdsb,dsbd);
@@ -1339,12 +1369,14 @@ HRESULT primarybuffer_create(DirectSoundDevice *device, IDirectSoundBufferImpl *
         dsb->IKsPropertySet_iface.lpVtbl = &iksbvt;
 	dsb->dsbd = *dsbd;
 
+#if 0
     dsb->android_socket = socket(AF_INET, SOCK_STREAM, 0);
     addr.sin_family = AF_INET;
     addr.sin_port = htons( atoi(port) );
     addr.sin_addr.s_addr = inet_addr( "127.0.0.1" );
     connect( dsb->android_socket, (struct sockaddr *)&addr, sizeof( addr));
     setsockopt( dsb->android_socket, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
+#endif
 
         /* IDirectSound3DListener */
         device->ds3dl.dwSize = sizeof(DS3DLISTENER);

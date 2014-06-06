@@ -30,6 +30,10 @@
 
 #include "wine/list.h"
 
+#include "android.h"
+
+#include <sys/time.h>
+
 extern int ds_hel_buflen DECLSPEC_HIDDEN;
 extern int ds_snd_queue_max DECLSPEC_HIDDEN;
 
@@ -105,6 +109,7 @@ struct DirectSoundDevice
 typedef struct BufferMemory
 {
     LONG                        ref;
+    dsound_shmem_buffer_t       *shmem_buffer_header;
     LPBYTE                      memory;
     struct list buffers;
 } BufferMemory;
@@ -150,8 +155,7 @@ struct IDirectSoundBufferImpl
     DWORD                       nAvgBytesPerSec;
     DWORD                       freq;
     DWORD                       android_socket;
-    DWORD                       start_time;
-    DWORD                       stop_offset;
+    DWORD                       shmid;
     DSVOLUMEPAN                 volpan;
     DSBUFFERDESC                dsbd;
     /* used for frequency conversion (PerfectPitch) */
