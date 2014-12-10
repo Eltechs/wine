@@ -27,7 +27,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
-
+#include <sys/un.h>
 
 #define NONAMELESSSTRUCT
 #define NONAMELESSUNION
@@ -882,8 +882,9 @@ HRESULT IDirectSoundBufferImpl_Create(
 	IDirectSoundBufferImpl **pdsb,
 	LPCDSBUFFERDESC dsbd)
 {
-	const char *port = getenv(ANDROID_DSOUND_SERVER_PORT_ARGUMENT_NAME);
-	struct sockaddr_in addr;
+	const char *path = getenv(ANDROID_DSOUND_SERVER_PORT_ARGUMENT_NAME);
+        const unsigned len = strlen(path);
+        struct sockaddr_un addr;
 	int yes = 1;
 
 	IDirectSoundBufferImpl *dsb;
@@ -990,13 +991,32 @@ HRESULT IDirectSoundBufferImpl_Create(
 	/* calculate fragment size and write lead */
 	DSOUND_RecalcFormat(dsb);
 
-	dsb->android_socket = socket(AF_INET, SOCK_STREAM, 0);
+        memset(&addr, 0, sizeof(addr));
+        addr.sun_family = AF_UNIX;
+        addr.sun_path[0] = '\0';
+        memcpy(addr.sun_path + 1, path, len);
+
+        dsb->android_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+
+        if ( dsb->android_socket < 0 )
+        {
+            WARN("Exagear: cannot create AF_UNIX socket for dsound!\n");
+        }
+
+        if ( 0 != connect( dsb->android_socket, (struct sockaddr *)&addr, sizeof(addr.sun_family) + len + 1) )
+        {
+            WARN("Exagear: cannot connect to AF_UNIX socket for dsound!\n");
+        }
+
+#if 0
+        dsb->android_socket = socket(AF_INET, SOCK_STREAM, 0);
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons( atoi(port) );
 	addr.sin_addr.s_addr = inet_addr( "127.0.0.1" );
 
 	connect(dsb->android_socket, (struct sockaddr *)&addr, sizeof(addr));
 	setsockopt(dsb->android_socket, IPPROTO_TCP, TCP_NODELAY, (char *) &yes, sizeof(yes));
+#endif
 
 	dsb->buffer->shmem_buffer_header->magic = DSOUND_ANDROID_SHMEM_BUFFER_MAGIC;
 	dsb->buffer->shmem_buffer_header->n_channels = dsb->pwfx->nChannels;
