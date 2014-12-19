@@ -4,8 +4,41 @@
 #define __WINE_CONFIG_H
 #ifndef WINE_CROSSTEST
 
+/* */
+#undef CONFIG_ELF_ET_DYN_BASE
+
+/* */
+#undef CONFIG_LOWMEM_END
+
+/* */
+#undef CONFIG_LOWMEM_SIZE
+
+/* */
+#undef CONFIG_LOWMEM_START
+
+/* */
+#undef CONFIG_SHARED_DATA
+
+/* */
+#undef CONFIG_VMSPLIT
+
+/* */
+#undef CONFIG_WINE_DATA_END
+
+/* */
+#undef CONFIG_WINE_DATA_SIZE
+
+/* */
+#undef CONFIG_WINE_DATA_START
+
 /* Define to a function attribute for Microsoft hotpatch assembly prefix. */
 #undef DECLSPEC_HOTPATCH
+
+/* */
+#undef ELF_INTERP_ADDRESS
+
+/* */
+#undef ELF_TEXT_ADDRESS
 
 /* Define to the file extension for executables. */
 #undef EXEEXT
@@ -1311,6 +1344,12 @@
 /* Define to 1 if you have the `__res_get_state' function. */
 #undef HAVE___RES_GET_STATE
 
+/* */
+#undef KERNEL32_IMAGE_BASE
+
+/* */
+#undef NTDLL_IMAGE_BASE
+
 /* Define to the address where bug reports for this package should be sent. */
 #undef PACKAGE_BUGREPORT
 
@@ -1328,6 +1367,9 @@
 
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
+
+/* */
+#undef RICHED20_IMAGE_BASE
 
 /* Define to the soname of the libcapi20 library. */
 #undef SONAME_LIBCAPI20
