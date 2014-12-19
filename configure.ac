@@ -32,7 +32,7 @@ AC_ARG_ENABLE(win16, AS_HELP_STRING([--disable-win16],[do not include Win16 supp
 AC_ARG_ENABLE(win64, AS_HELP_STRING([--enable-win64],[build a Win64 emulator on AMD64 (won't run Win32 binaries)]))
 AC_ARG_ENABLE(tests, AS_HELP_STRING([--disable-tests],[do not build the regression tests]))
 AC_ARG_ENABLE(maintainer-mode, AS_HELP_STRING([--enable-maintainer-mode],[enable maintainer-specific build rules]))
-
+AC_ARG_ENABLE(mem2g, AS_HELP_STRING([--enable-mem2g], [force 2g/2g userspace/kernel memory split instead of classic 3g/1g]))
 AC_ARG_WITH(alsa,      AS_HELP_STRING([--without-alsa],[do not use the Alsa sound support]),
             [if test "x$withval" = "xno"; then ac_cv_header_sys_asoundlib_h=no; ac_cv_header_alsa_asoundlib_h=no; fi])
 AC_ARG_WITH(capi,      AS_HELP_STRING([--without-capi],[do not use CAPI (ISDN support)]))
@@ -350,6 +350,51 @@ else
   with_gettextpo=yes
   AS_UNSET(ac_cv_header_gettext_po_h)
 fi
+
+if test "x$enable_mem2g" == "xyes"
+then
+  AC_DEFINE([CONFIG_VMSPLIT], [0x80000000], [ ])
+  AC_SUBST([CONFIG_VMSPLIT], [0x80000000])
+  AC_DEFINE([ELF_INTERP_ADDRESS], [0x3bf00400], [ ])
+  AC_SUBST([ELF_INTERP_ADDRESS], [0x3bf00400])
+  AC_DEFINE([ELF_TEXT_ADDRESS], [0x3c400000], [ ])
+  AC_SUBST([ELF_TEXT_ADDRESS], [0x3c400000])
+  AC_DEFINE([KERNEL32_IMAGE_BASE], [0x3b800000], [ ])
+  AC_SUBST([KERNEL32_IMAGE_BASE], [0x3b800000])
+  AC_DEFINE([NTDLL_IMAGE_BASE], [0x3bc00000], [ ])
+  AC_SUBST([NTDLL_IMAGE_BASE], [0x3bc00000])
+  AC_DEFINE([RICHED20_IMAGE_BASE], [0x3ac00000], [ ])
+  AC_SUBST([RICHED20_IMAGE_BASE], [0x3ac00000])
+else
+  AC_DEFINE([CONFIG_VMSPLIT], [0xc0000000], [ ])
+  AC_SUBST([CONFIG_VMSPLIT], [0xc0000000])
+  AC_DEFINE([ELF_INTERP_ADDRESS], [0x7bf00400], [ ])
+  AC_SUBST([ELF_INTERP_ADDRESS], [0x7bf00400])
+  AC_DEFINE([ELF_TEXT_ADDRESS], [0x7c400000], [ ])
+  AC_SUBST([ELF_TEXT_ADDRESS], [0x7c400000])
+  AC_DEFINE([KERNEL32_IMAGE_BASE], [0x7b800000], [ ])
+  AC_SUBST([KERNEL32_IMAGE_BASE], [0x7b800000])
+  AC_DEFINE([NTDLL_IMAGE_BASE], [0x7bc00000], [ ])
+  AC_SUBST([NTDLL_IMAGE_BASE], [0x7bc00000])
+  AC_DEFINE([RICHED20_IMAGE_BASE], [0x7ac00000], [ ])
+  AC_SUBST([RICHED20_IMAGE_BASE], [0x7ac00000])
+fi
+AC_DEFINE([CONFIG_ELF_ET_DYN_BASE], [(CONFIG_VMSPLIT - 0x40000000)], [ ])
+AC_SUBST([CONFIG_ELF_ET_DYN_BASE], [(CONFIG_VMSPLIT - 0x40000000)])
+AC_DEFINE([CONFIG_SHARED_DATA], [(CONFIG_VMSPLIT - 0x40020000)], [ ])
+AC_SUBST([CONFIG_SHARED_DATA], [(CONFIG_VMSPLIT - 0x40020000)])
+AC_DEFINE([CONFIG_LOWMEM_START], [0x00110000], [ ])
+AC_SUBST([CONFIG_LOWMEM_START], [0x00110000])
+AC_DEFINE([CONFIG_LOWMEM_END], [( CONFIG_VMSPLIT - 0x18000000)], [ ])
+AC_SUBST([CONFIG_LOWMEM_END], [( CONFIG_VMSPLIT - 0x18000000)])
+AC_DEFINE([CONFIG_LOWMEM_SIZE], [( CONFIG_LOWMEM_END - CONFIG_LOWMEM_START)], [ ])
+AC_SUBST([CONFIG_LOWMEM_SIZE], [( CONFIG_LOWMEM_END - CONFIG_LOWMEM_START)])
+AC_DEFINE([CONFIG_WINE_DATA_START], [( CONFIG_VMSPLIT - 0x41000000)], [ ])
+AC_SUBST([CONFIG_WINE_DATA_START], [( CONFIG_VMSPLIT - 0x41000000)])
+AC_DEFINE([CONFIG_WINE_DATA_END], [(CONFIG_VMSPLIT - 0x3e000000)], [ ])
+AC_SUBST([CONFIG_WINE_DATA_END], [(CONFIG_VMSPLIT - 0x3e000000)])
+AC_DEFINE([CONFIG_WINE_DATA_SIZE], [(CONFIG_WINE_DATA_END - CONFIG_WINE_DATA_START)], [ ])
+AC_SUBST([CONFIG_WINE_DATA_SIZE], [(CONFIG_WINE_DATA_END - CONFIG_WINE_DATA_START)])
 
 test "x$with_gettext" != xno || MSGFMT=false
 if test "$MSGFMT" != "false"
@@ -904,13 +949,13 @@ case $host_os in
 
       case $host_cpu in
         *i[[3456789]]86* | x86_64)
-          WINE_TRY_CFLAGS([-Wl,--section-start,.interp=0x7bf00400],
+          WINE_TRY_CFLAGS([-Wl,--section-start,.interp=$ELF_INTERP_ADDRESS],
                           [case $host_os in
                            freebsd* | kfreebsd*-gnu) LDEXECFLAGS="$LDEXECFLAGS -Wl,--section-start,.interp=0x60000400" ;;
-                           *) LDEXECFLAGS="$LDEXECFLAGS -Wl,--section-start,.interp=0x7bf00400" ;;
+                           *) LDEXECFLAGS="$LDEXECFLAGS -Wl,--section-start,.interp=$ELF_INTERP_ADDRESS" ;;
                            esac
                           ])
-          WINE_TRY_CFLAGS([-Wl,-Ttext-segment=0x7bc00000],[:],
+          WINE_TRY_CFLAGS([-Wl,-Ttext-segment=$ELF_TEXT_ADDRESS],[:],
                           [AC_PATH_PROG(PRELINK, prelink, false, [/sbin /usr/sbin $PATH])
                            if test "x$PRELINK" = xfalse
                            then

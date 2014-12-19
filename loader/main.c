@@ -153,9 +153,12 @@ static void check_vmsplit( void *stack )
     {
         /* if the stack is below 0x80000000, assume we can safely try a munmap there */
         if (munmap( (void *)0x80000000, 1 ) == -1 && errno == EINVAL)
-            fprintf( stderr,
-                     "Warning: memory above 0x80000000 doesn't seem to be accessible.\n"
-                     "Wine requires a 3G/1G user/kernel memory split to work properly.\n" );
+	{
+//	      Removed for Exagear 2g/2g wine version
+//            fprintf( stderr,
+//                     "Warning: memory above 0x80000000 doesn't seem to be accessible.\n"
+//                     "Wine requires a 3G/1G user/kernel memory split to work properly.\n" );
+	}
     }
 }
 

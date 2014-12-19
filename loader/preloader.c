@@ -109,10 +109,10 @@
 static struct wine_preload_info preload_info[] =
 {
 #ifdef __i386__
-    { (void *)0x00000000, 0x00010000 },  /* low 64k */
-    { (void *)0x00010000, 0x00100000 },  /* DOS area */
-    { (void *)0x00110000, 0x67ef0000 },  /* low memory area */
-    { (void *)0x7f000000, 0x03000000 },  /* top-down allocations + shared heap + virtual heap */
+    { (void *)0x00000000,             0x00010000 },            /* low 64k */
+    { (void *)0x00010000,             0x00100000 },            /* DOS area */
+    { (void *)CONFIG_LOWMEM_START,    CONFIG_LOWMEM_SIZE },    /* low memory area */
+    { (void *)CONFIG_WINE_DATA_START, CONFIG_WINE_DATA_SIZE }, /* top-down allocations + shared heap + virtual heap */
 #else
     { (void *)0x000000010000, 0x00100000 },  /* DOS area */
     { (void *)0x000000110000, 0x67ef0000 },  /* low memory area */
@@ -1219,8 +1219,8 @@ void* wld_start( void **stack )
 
     /* add an executable page at the top of the address space to defeat
      * broken no-exec protections that play with the code selector limit */
-    if (is_addr_reserved( (char *)0x80000000 - page_size ))
-        wld_mprotect( (char *)0x80000000 - page_size, page_size, PROT_EXEC | PROT_READ );
+    if (is_addr_reserved( (char *)CONFIG_ELF_ET_DYN_BASE - page_size ))
+        wld_mprotect( (char *)CONFIG_ELF_ET_DYN_BASE - page_size, page_size, PROT_EXEC | PROT_READ );
 
     /* load the main binary */
     map_so_lib( argv[1], &main_binary_map );

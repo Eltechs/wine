@@ -227,7 +227,7 @@ HANDLE thread_init(void)
 
     /* reserve space for shared user data */
 
-    addr = (void *)0x7ffe0000;
+    addr = (void *)CONFIG_SHARED_DATA;
     size = 0x10000;
     status = NtAllocateVirtualMemory( NtCurrentProcess(), &addr, 0, &size,
                                       MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE );
