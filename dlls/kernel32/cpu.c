@@ -46,7 +46,7 @@
 
 WINE_DEFAULT_DEBUG_CHANNEL(reg);
 
-#define SHARED_DATA     ((KSHARED_USER_DATA*)0x7ffe0000)
+#define SHARED_DATA     ((KSHARED_USER_DATA*)CONFIG_SHARED_DATA)
 
 /****************************************************************************
  *		QueryPerformanceCounter (KERNEL32.@)

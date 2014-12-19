@@ -1327,6 +1327,16 @@
    convention */
 #undef __ASM_STDCALL_FUNC
 
+#undef CONFIG_VMSPLIT
+#undef CONFIG_ELF_ET_DYN_BASE
+#undef CONFIG_SHARED_DATA
+#undef CONFIG_LOWMEM_START
+#undef CONFIG_LOWMEM_END
+#undef CONFIG_LOWMEM_SIZE
+#undef CONFIG_WINE_DATA_START
+#undef CONFIG_WINE_DATA_END
+#undef CONFIG_WINE_DATA_SIZE
+
 /* Define to `__inline__' or `__inline' if that's what the C compiler
    calls it, or to nothing if 'inline' is not supported under any name.  */
 #ifndef __cplusplus

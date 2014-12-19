@@ -37,7 +37,7 @@ LIBPTHREAD  = @LIBPTHREAD@
 LDEXECFLAGS = @LDEXECFLAGS@
 
 wine-preloader wine64-preloader: preloader.o Makefile.in
-	$(CC) -o $@ -static -nostartfiles -nodefaultlibs -Wl,-Ttext=0x7c400000 preloader.o $(LIBPORT) $(LDFLAGS)
+	$(CC) -o $@ -static -nostartfiles -nodefaultlibs -Wl,-Ttext=@ELF_TEXT_ADDRESS@ preloader.o $(LIBPORT) $(LDFLAGS)
 
 $(MAIN_BINARY): main.o Makefile.in wine_info.plist
 	$(CC) -o $@ $(LDEXECFLAGS) main.o $(LIBWINE) $(LIBPORT) $(LIBPTHREAD) $(EXTRALIBS) $(LDFLAGS) $(LDRPATH_LOCAL)

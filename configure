@@ -792,7 +792,21 @@ PACKAGE_VERSION
 PACKAGE_TARNAME
 PACKAGE_NAME
 PATH_SEPARATOR
-SHELL'
+SHELL
+CONFIG_VMSPLIT
+CONFIG_ELF_ET_DYN_BASE
+CONFIG_SHARED_DATA
+CONFIG_LOWMEM_START
+CONFIG_LOWMEM_END
+CONFIG_LOWMEM_SIZE
+CONFIG_WINE_DATA_START
+CONFIG_WINE_DATA_END
+CONFIG_WINE_DATA_SIZE
+ELF_INTERP_ADDRESS
+ELF_TEXT_ADDRESS
+KERNEL32_IMAGE_BASE
+NTDLL_IMAGE_BASE
+RICHED20_IMAGE_BASE'
 ac_subst_files='MAKE_RULES
 MAKE_TEST_RULES
 MAKE_DLL_RULES
@@ -851,6 +865,7 @@ with_wine_tools
 with_wine64
 enable_largefile
 with_x
+vmsplit
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1274,6 +1289,11 @@ do
   | --x-librar=* | --x-libra=* | --x-libr=* | --x-lib=* | --x-li=* | --x-l=*)
     x_libraries=$ac_optarg ;;
 
+  --vm | --vmsplit )
+    ac_prev=vmsplit ;;
+  --vm=* | --vmsplit=* )
+    vmsplit=$ac_optarg ;;
+
   -*) as_fn_error $? "unrecognized option: \`$ac_option'
 Try \`$0 --help' for more information"
     ;;
@@ -1563,6 +1583,7 @@ Optional Packages:
   --with-wine-tools=DIR   use Wine tools from directory DIR
   --with-wine64=DIR       use the 64-bit Wine in DIR for a Wow64 build
   --with-x                use the X Window System
+  --vmsplit=<2g|3g>       assume correspoding memory split address. default 3g
 
 Some influential environment variables:
   CC          C compiler command
@@ -6638,7 +6659,7 @@ fi
     enable_ws2_32=${enable_ws2_32:-no}
     enable_loader=${enable_loader:-no}
     enable_server=${enable_server:-no}
-        with_x=${with_x:-no}
+    with_x=${with_x:-no}
     with_pthread=${with_pthread:-no}
 
         crtlibs=""
@@ -7046,32 +7067,83 @@ if test $ac_cv_cflags__Wl___enable_new_dtags = yes; then :
   LDRPATH_INSTALL="$LDRPATH_INSTALL -Wl,--enable-new-dtags"
 fi
 
+vmsplit=${vmsplit-3g}
+case $vmsplit in
+  3|3g|3G) vmsplit=0xc0000000
+    ELF_INTERP_ADDRESS=0x7bf00400
+    ELF_TEXT_ADDRESS=0x7c400000
+    KERNEL32_IMAGE_BASE=0x7b800000
+    NTDLL_IMAGE_BASE=0x7bc00000
+    RICHED20_IMAGE_BASE=0x7ac00000
+    ;;
+  2|2g|2G) vmsplit=0x80000000
+    ELF_INTERP_ADDRESS=0x3bf00400
+    ELF_TEXT_ADDRESS=0x3c400000
+    KERNEL32_IMAGE_BASE=0x3b800000
+    NTDLL_IMAGE_BASE=0x3bc00000
+    RICHED20_IMAGE_BASE=0x3ac00000
+    ;;
+  1|1g|1G) vmsplit=0x40000000
+    exit 1
+    ;;
+esac
+
+CONFIG_VMSPLIT="${vmsplit}"
+CONFIG_ELF_ET_DYN_BASE="( CONFIG_VMSPLIT - 0x40000000 )"
+CONFIG_SHARED_DATA="( CONFIG_VMSPLIT - 0x40020000 )"
+CONFIG_LOWMEM_START="0x00110000"
+CONFIG_LOWMEM_END="( CONFIG_VMSPLIT - 0x18000000 )"
+CONFIG_LOWMEM_SIZE="( CONFIG_LOWMEM_END - CONFIG_LOWMEM_START )"
+CONFIG_WINE_DATA_START="( CONFIG_VMSPLIT - 0x41000000 )"
+CONFIG_WINE_DATA_END="( CONFIG_VMSPLIT - 0x3e000000 )"
+CONFIG_WINE_DATA_SIZE="( CONFIG_WINE_DATA_END - CONFIG_WINE_DATA_START )"
+
     case $host_cpu in
       *i[3456789]86* | x86_64)
-        { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether the compiler supports -Wl,--section-start,.interp=0x7bf00400" >&5
-$as_echo_n "checking whether the compiler supports -Wl,--section-start,.interp=0x7bf00400... " >&6; }
-if ${ac_cv_cflags__Wl___section_start__interp_0x7bf00400+:} false; then :
+        { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether the compiler supports -Wl,--section-start,.interp=${ELF_INTERP_ADDRESS}" >&5
+$as_echo_n "checking whether the compiler supports -Wl,--section-start,.interp=${ELF_INTERP_ADDRESS}... " >&6; }
+if ${ac_cv_flags__start__interp_at_address+:} false; then :
   $as_echo_n "(cached) " >&6
 else
-  ac_wine_try_cflags_saved=$CFLAGS
-CFLAGS="$CFLAGS -Wl,--section-start,.interp=0x7bf00400"
+  ac_wine_try_ldflags_saved=$LDFLAGS
+LDFLAGS="$LDFLAGS -Wl,--section-start,.interp=${ELF_INTERP_ADDRESS}"
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+#define CONFIG_VMSPLIT         ${CONFIG_VMSPLIT}
+#define CONFIG_ELF_ET_DYN_BASE ${CONFIG_ELF_ET_DYN_BASE}
+#define CONFIG_SHARED_DATA     ${CONFIG_SHARED_DATA}
+#define CONFIG_LOWMEM_START    ${CONFIG_LOWMEM_START}
+#define CONFIG_LOWMEM_END      ${CONFIG_LOWMEM_END}
+#define CONFIG_LOWMEM_SIZE     ${CONFIG_LOWMEM_SIZE}
+#define CONFIG_WINE_DATA_START ${CONFIG_WINE_DATA_START}
+#define CONFIG_WINE_DATA_END   ${CONFIG_WINE_DATA_END}
+#define CONFIG_WINE_DATA_SIZE  ${CONFIG_WINE_DATA_SIZE}
 /* end confdefs.h.  */
 int main(int argc, char **argv) { return 0; }
 _ACEOF
 if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_cflags__Wl___section_start__interp_0x7bf00400=yes
+  ac_cv_flags__start__interp_at_address=yes
 else
-  ac_cv_cflags__Wl___section_start__interp_0x7bf00400=no
+  ac_cv_flags__start__interp_at_address=no
 fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
-CFLAGS=$ac_wine_try_cflags_saved
+LDFLAGS=$ac_wine_try_ldflags_saved
 fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_cflags__Wl___section_start__interp_0x7bf00400" >&5
-$as_echo "$ac_cv_cflags__Wl___section_start__interp_0x7bf00400" >&6; }
-if test $ac_cv_cflags__Wl___section_start__interp_0x7bf00400 = yes; then :
-  LDEXECFLAGS="$LDEXECFLAGS -Wl,--section-start,.interp=0x7bf00400"
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_flags__start__interp_at_address" >&5
+$as_echo "$ac_cv_flags__start__interp_at_address" >&6; }
+if test $ac_cv_flags__start__interp_at_address = yes; then :
+  LDEXECFLAGS="$LDEXECFLAGS -Wl,--section-start,.interp=${ELF_INTERP_ADDRESS}"
+  cat >>confdefs.h <<_ACEOF
+#define CONFIG_VMSPLIT         ${CONFIG_VMSPLIT}
+#define CONFIG_ELF_ET_DYN_BASE ${CONFIG_ELF_ET_DYN_BASE}
+#define CONFIG_SHARED_DATA     ${CONFIG_SHARED_DATA}
+#define CONFIG_LOWMEM_START    ${CONFIG_LOWMEM_START}
+#define CONFIG_LOWMEM_END      ${CONFIG_LOWMEM_END}
+#define CONFIG_LOWMEM_SIZE     ${CONFIG_LOWMEM_SIZE}
+#define CONFIG_WINE_DATA_START ${CONFIG_WINE_DATA_START}
+#define CONFIG_WINE_DATA_END   ${CONFIG_WINE_DATA_END}
+#define CONFIG_WINE_DATA_SIZE  ${CONFIG_WINE_DATA_SIZE}
+_ACEOF
 fi
         ;;
     esac
@@ -7366,34 +7438,85 @@ if test $ac_cv_cflags__Wl___enable_new_dtags = yes; then :
   LDRPATH_INSTALL="$LDRPATH_INSTALL -Wl,--enable-new-dtags"
 fi
 
+vmsplit=${vmsplit-3g}
+case $vmsplit in
+  3|3g|3G) vmsplit=0xc0000000
+    ELF_INTERP_ADDRESS=0x7bf00400
+    ELF_TEXT_ADDRESS=0x7c400000
+    KERNEL32_IMAGE_BASE=0x7b800000
+    NTDLL_IMAGE_BASE=0x7bc00000
+    RICHED20_IMAGE_BASE=0x7ac00000
+    ;;
+  2|2g|2G) vmsplit=0x80000000
+    ELF_INTERP_ADDRESS=0x3bf00400
+    ELF_TEXT_ADDRESS=0x3c400000
+    KERNEL32_IMAGE_BASE=0x3b800000
+    NTDLL_IMAGE_BASE=0x3bc00000
+    RICHED20_IMAGE_BASE=0x3ac00000
+    ;;
+  1|1g|1G) vmsplit=0x40000000
+    exit 1
+    ;;
+esac
+
+CONFIG_VMSPLIT="${vmsplit}"
+CONFIG_ELF_ET_DYN_BASE="( CONFIG_VMSPLIT - 0x40000000 )"
+CONFIG_SHARED_DATA="( CONFIG_VMSPLIT - 0x40020000 )"
+CONFIG_LOWMEM_START="0x00110000"
+CONFIG_LOWMEM_END="( CONFIG_VMSPLIT - 0x18000000 )"
+CONFIG_LOWMEM_SIZE="( CONFIG_LOWMEM_END - CONFIG_LOWMEM_START )"
+CONFIG_WINE_DATA_START="( CONFIG_VMSPLIT - 0x41000000 )"
+CONFIG_WINE_DATA_END="( CONFIG_VMSPLIT - 0x3e000000 )"
+CONFIG_WINE_DATA_SIZE="( CONFIG_WINE_DATA_END - CONFIG_WINE_DATA_START )"
+
       case $host_cpu in
         *i[3456789]86* | x86_64)
-          { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether the compiler supports -Wl,--section-start,.interp=0x7bf00400" >&5
-$as_echo_n "checking whether the compiler supports -Wl,--section-start,.interp=0x7bf00400... " >&6; }
-if ${ac_cv_cflags__Wl___section_start__interp_0x7bf00400+:} false; then :
+          { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether the compiler supports -Wl,--section-start,.interp=${ELF_INTERP_ADDRESS}" >&5
+$as_echo_n "checking whether the compiler supports -Wl,--section-start,.interp=${ELF_INTERP_ADDRESS}... " >&6; }
+if ${ac_cv_flags__start__interp_at_address+:} false; then :
   $as_echo_n "(cached) " >&6
 else
-  ac_wine_try_cflags_saved=$CFLAGS
-CFLAGS="$CFLAGS -Wl,--section-start,.interp=0x7bf00400"
+  ac_wine_try_ldflags_saved=$LDFLAGS
+LDFLAGS="$LDFLAGS -Wl,--section-start,.interp=${ELF_INTERP_ADDRESS}"
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+#define CONFIG_VMSPLIT         ${CONFIG_VMSPLIT}
+#define CONFIG_ELF_ET_DYN_BASE ${CONFIG_ELF_ET_DYN_BASE}
+#define CONFIG_SHARED_DATA     ${CONFIG_SHARED_DATA}
+#define CONFIG_LOWMEM_START    ${CONFIG_LOWMEM_START}
+#define CONFIG_LOWMEM_END      ${CONFIG_LOWMEM_END}
+#define CONFIG_LOWMEM_SIZE     ${CONFIG_LOWMEM_SIZE}
+#define CONFIG_WINE_DATA_START ${CONFIG_WINE_DATA_START}
+#define CONFIG_WINE_DATA_END   ${CONFIG_WINE_DATA_END}
+#define CONFIG_WINE_DATA_SIZE  ${CONFIG_WINE_DATA_SIZE}
 /* end confdefs.h.  */
 int main(int argc, char **argv) { return 0; }
 _ACEOF
 if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_cflags__Wl___section_start__interp_0x7bf00400=yes
+  ac_cv_flags__start__interp_at_address=yes
 else
-  ac_cv_cflags__Wl___section_start__interp_0x7bf00400=no
+  ac_cv_flags__start__interp_at_address=no
 fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
-CFLAGS=$ac_wine_try_cflags_saved
+LDFLAGS=$ac_wine_try_ldflags_saved
 fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_cflags__Wl___section_start__interp_0x7bf00400" >&5
-$as_echo "$ac_cv_cflags__Wl___section_start__interp_0x7bf00400" >&6; }
-if test $ac_cv_cflags__Wl___section_start__interp_0x7bf00400 = yes; then :
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_flags__start__interp_at_address" >&5
+$as_echo "$ac_cv_flags__start__interp_at_address" >&6; }
+if test $ac_cv_flags__start__interp_at_address = yes; then :
   case $host_os in
                            freebsd* | kfreebsd*-gnu) LDEXECFLAGS="$LDEXECFLAGS -Wl,--section-start,.interp=0x60000400" ;;
-                           *) LDEXECFLAGS="$LDEXECFLAGS -Wl,--section-start,.interp=0x7bf00400" ;;
+                           *) LDEXECFLAGS="$LDEXECFLAGS -Wl,--section-start,.interp=${ELF_INTERP_ADDRESS}"
+                              cat >>confdefs.h <<_ACEOF
+#define CONFIG_VMSPLIT         ${CONFIG_VMSPLIT}
+#define CONFIG_ELF_ET_DYN_BASE ${CONFIG_ELF_ET_DYN_BASE}
+#define CONFIG_SHARED_DATA     ${CONFIG_SHARED_DATA}
+#define CONFIG_LOWMEM_START    ${CONFIG_LOWMEM_START}
+#define CONFIG_LOWMEM_END      ${CONFIG_LOWMEM_END}
+#define CONFIG_LOWMEM_SIZE     ${CONFIG_LOWMEM_SIZE}
+#define CONFIG_WINE_DATA_START ${CONFIG_WINE_DATA_START}
+#define CONFIG_WINE_DATA_END   ${CONFIG_WINE_DATA_END}
+#define CONFIG_WINE_DATA_SIZE  ${CONFIG_WINE_DATA_SIZE}
+_ACEOF
                            esac
 
 fi

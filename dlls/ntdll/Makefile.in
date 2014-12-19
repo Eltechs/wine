@@ -3,7 +3,7 @@ MODULE    = ntdll.dll
 IMPORTLIB = ntdll
 IMPORTS   = winecrt0
 EXTRALIBS = @IOKITLIB@ @LIBRT@ @LIBPTHREAD@
-EXTRADLLFLAGS = -nodefaultlibs -Wl,--image-base,0x7bc00000
+EXTRADLLFLAGS = -nodefaultlibs -Wl,--image-base,@NTDLL_IMAGE_BASE@
 
 C_SRCS = \
 	actctx.c \
