@@ -20,8 +20,9 @@ typedef struct
     uint32_t sample_rate;
     uint32_t n_samples;
     volatile uint32_t current_pos;
+    volatile uint32_t is_playing;
 
-    uint32_t padding[11];
+    uint32_t padding[10];
 
     uint8_t data[0];
 } dsound_shmem_buffer_t;

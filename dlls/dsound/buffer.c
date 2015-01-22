@@ -286,11 +286,7 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Play(IDirectSoundBuffer8 *iface, DW
 	RtlAcquireResourceExclusive(&This->lock, TRUE);
 
 	This->playflags = flags;
-	if (This->state == STATE_STOPPED) {
-		This->leadin = TRUE;
-		This->state = STATE_STARTING;
-	} else if (This->state == STATE_STOPPING)
-		This->state = STATE_PLAYING;
+	This->buffer->shmem_buffer_header->is_playing = 1;
 
 	cmd.flags = flags;
 	SEND_DSOUND_ANDROID_CMD();
@@ -313,13 +309,7 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Stop(IDirectSoundBuffer8 *iface)
 	/* **** */
 	RtlAcquireResourceExclusive(&This->lock, TRUE);
 
-	if (This->state == STATE_PLAYING)
-		This->state = STATE_STOPPING;
-	else if (This->state == STATE_STARTING)
-	{
-		This->state = STATE_STOPPED;
-		DSOUND_CheckEvent(This, 0, 0);
-	}
+	This->buffer->shmem_buffer_header->is_playing = 0;
 
 	SEND_DSOUND_ANDROID_CMD();
 
@@ -388,7 +378,7 @@ static HRESULT WINAPI IDirectSoundBufferImpl_GetCurrentPosition(IDirectSoundBuff
 	if (writepos)
 		*writepos = pos;
 
-	if (writepos && This->state != STATE_STOPPED) {
+	if (writepos && (This->buffer->shmem_buffer_header->is_playing != 0)) {
 		/* apply the documented 10ms lead to writepos */
 		*writepos += This->writelead;
 		*writepos %= This->buflen;
@@ -415,7 +405,8 @@ static HRESULT WINAPI IDirectSoundBufferImpl_GetStatus(IDirectSoundBuffer8 *ifac
 
 	*status = 0;
 	RtlAcquireResourceShared(&This->lock, TRUE);
-	if ((This->state == STATE_STARTING) || (This->state == STATE_PLAYING)) {
+	__sync_synchronize();
+	if (This->buffer->shmem_buffer_header->is_playing != 0) {
 		*status |= DSBSTATUS_PLAYING;
 		if (This->playflags & DSBPLAY_LOOPING)
 			*status |= DSBSTATUS_LOOPING;
@@ -505,8 +496,6 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Lock(IDirectSoundBuffer8 *iface, DW
 
 	if (writecursor+writebytes <= This->buflen) {
 		*(LPBYTE*)lplpaudioptr1 = This->buffer->memory+writecursor;
-		if (This->sec_mixpos >= writecursor && This->sec_mixpos < writecursor + writebytes && This->state == STATE_PLAYING)
-			WARN("Overwriting mixing position, case 1\n");
 		*audiobytes1 = writebytes;
 		if (lplpaudioptr2)
 			*(LPBYTE*)lplpaudioptr2 = NULL;
@@ -516,17 +505,12 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Lock(IDirectSoundBuffer8 *iface, DW
 		  *(LPBYTE*)lplpaudioptr1, *audiobytes1, lplpaudioptr2 ? *(LPBYTE*)lplpaudioptr2 : NULL, audiobytes2 ? *audiobytes2: 0, writecursor);
 		TRACE("->%d.0\n",writebytes);
 	} else {
-		DWORD remainder = writebytes + writecursor - This->buflen;
 		*(LPBYTE*)lplpaudioptr1 = This->buffer->memory+writecursor;
 		*audiobytes1 = This->buflen-writecursor;
-		if (This->sec_mixpos >= writecursor && This->sec_mixpos < writecursor + writebytes && This->state == STATE_PLAYING)
-			WARN("Overwriting mixing position, case 2\n");
 		if (lplpaudioptr2)
 			*(LPBYTE*)lplpaudioptr2 = This->buffer->memory;
 		if (audiobytes2)
 			*audiobytes2 = writebytes-(This->buflen-writecursor);
-		if (audiobytes2 && This->sec_mixpos < remainder && This->state == STATE_PLAYING)
-			WARN("Overwriting mixing position, case 3\n");
 		TRACE("Locked %p(%i bytes) and %p(%i bytes) writecursor=%d\n", *(LPBYTE*)lplpaudioptr1, *audiobytes1, lplpaudioptr2 ? *(LPBYTE*)lplpaudioptr2 : NULL, audiobytes2 ? *audiobytes2: 0, writecursor);
 	}
 
