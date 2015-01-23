@@ -191,6 +191,21 @@ static HRESULT WINAPI ddraw_palette_SetEntries(IDirectDrawPalette *iface,
     hr = wined3d_palette_set_entries(palette->wineD3DPalette, flags, start, count, entries);
     wined3d_mutex_unlock();
 
+    /**
+     * FIXME:
+     *  Fix fading, then remove nanosleep call.
+     *
+     * NOTE:
+     *  Fading in Fallout doesn't work during two phases just at start.
+     *  Also it doesn't work after clicking "New Game".
+     *
+     *  This nanosleep call reduces time of such fading phases (just observation).
+     */
+    struct timespec ts;
+    ts.tv_sec = 0;
+    ts.tv_nsec = 10000000;
+    nanosleep(&ts, 0);
+
     return hr;
 }
 
