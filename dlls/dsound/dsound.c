@@ -762,8 +762,8 @@ UINT DSOUND_create_timer(LPTIMECALLBACK cb, DWORD_PTR user)
 HRESULT DirectSoundDevice_Initialize(DirectSoundDevice ** ppDevice, LPCGUID lpcGUID)
 {
     HRESULT hr = DS_OK;
-    GUID devGUID;
     DirectSoundDevice *device;
+    GUID devGUID;
     IMMDevice *mmdevice;
 
     TRACE("(%p,%s)\n",ppDevice,debugstr_guid(lpcGUID));
@@ -781,6 +781,7 @@ HRESULT DirectSoundDevice_Initialize(DirectSoundDevice ** ppDevice, LPCGUID lpcG
             IsEqualGUID(lpcGUID, &DSDEVID_DefaultVoiceCapture))
         return DSERR_NODRIVER;
 
+
     if (GetDeviceID(lpcGUID, &devGUID) != DS_OK) {
         WARN("invalid parameter: lpcGUID\n");
         return DSERR_INVALIDPARAM;
@@ -791,6 +792,7 @@ HRESULT DirectSoundDevice_Initialize(DirectSoundDevice ** ppDevice, LPCGUID lpcG
         return hr;
 
     EnterCriticalSection(&DSOUND_renderers_lock);
+
 
     LIST_FOR_EACH_ENTRY(device, &DSOUND_renderers, DirectSoundDevice, entry){
         if(IsEqualGUID(&device->guid, &devGUID)){
@@ -826,6 +828,7 @@ HRESULT DirectSoundDevice_Initialize(DirectSoundDevice ** ppDevice, LPCGUID lpcG
 
     ZeroMemory(&device->drvcaps, sizeof(device->drvcaps));
 
+#if 0
     if(DSOUND_check_supported(device->client, 11025, 8, 1) ||
             DSOUND_check_supported(device->client, 22050, 8, 1) ||
             DSOUND_check_supported(device->client, 44100, 8, 1) ||
@@ -853,6 +856,9 @@ HRESULT DirectSoundDevice_Initialize(DirectSoundDevice ** ppDevice, LPCGUID lpcG
             DSOUND_check_supported(device->client, 48000, 16, 2) ||
             DSOUND_check_supported(device->client, 96000, 16, 2))
         device->drvcaps.dwFlags |= DSCAPS_PRIMARY16BIT | DSCAPS_PRIMARYSTEREO;
+#endif
+
+    device->drvcaps.dwFlags |= DSCAPS_PRIMARY16BIT | DSCAPS_PRIMARYMONO | DSCAPS_PRIMARYSTEREO;
 
     /* the dsound mixer supports all of the following */
     device->drvcaps.dwFlags |= DSCAPS_SECONDARY8BIT | DSCAPS_SECONDARY16BIT;

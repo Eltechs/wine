@@ -333,6 +333,7 @@ static void get_device_guid(EDataFlow flow, const char *device, GUID *guid)
 
 static BOOL alsa_try_open(const char *devnode, snd_pcm_stream_t stream)
 {
+#if 0
     snd_pcm_t *handle;
     int err;
 
@@ -345,6 +346,7 @@ static BOOL alsa_try_open(const char *devnode, snd_pcm_stream_t stream)
     }
 
     snd_pcm_close(handle);
+#endif
     return TRUE;
 }
 
@@ -532,6 +534,7 @@ static HRESULT alsa_enum_devices(EDataFlow flow, WCHAR ***ids, GUID **guids,
         ++*num;
     }
 
+#if 0
     get_reg_devices(flow, stream, ids, guids, num);
 
     for(err = snd_card_next(&card); card != -1 && err >= 0;
@@ -575,6 +578,7 @@ static HRESULT alsa_enum_devices(EDataFlow flow, WCHAR ***ids, GUID **guids,
 
         snd_ctl_close(ctl);
     }
+#endif
 
     if(err != 0)
         WARN("Got a failure during card enumeration: %d (%s)\n",

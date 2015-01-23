@@ -51,7 +51,10 @@ static DWORD DSOUND_fraglen(DirectSoundDevice *device)
     HRESULT hr;
     DWORD ret;
 
+#if 0
     hr = IAudioClient_GetDevicePeriod(device->client, &period, NULL);
+#endif
+    hr = -1;
     if(FAILED(hr)){
         /* just guess at 10ms */
         WARN("GetDevicePeriod failed: %08x\n", hr);
@@ -68,14 +71,32 @@ static HRESULT DSOUND_WaveFormat(DirectSoundDevice *device, IAudioClient *client
 {
     WAVEFORMATEXTENSIBLE *retwfe = NULL;
     WAVEFORMATEX *w;
+#if 0
     HRESULT hr;
+#endif
 
     if (!forcewave) {
         WAVEFORMATEXTENSIBLE *mixwfe;
-        hr = IAudioClient_GetMixFormat(client, (WAVEFORMATEX**)&mixwfe);
 
+#if 0
+        hr = IAudioClient_GetMixFormat(client, (WAVEFORMATEX**)&mixwfe);
         if (FAILED(hr))
             return hr;
+#endif
+
+        mixwfe = CoTaskMemAlloc(sizeof(WAVEFORMATEXTENSIBLE));
+        mixwfe->Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+        mixwfe->Format.wBitsPerSample = 16;
+        mixwfe->SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
+        mixwfe->Format.nChannels = 2;
+        mixwfe->dwChannelMask = KSAUDIO_SPEAKER_STEREO;
+        mixwfe->Format.nSamplesPerSec = 22050;
+        mixwfe->Format.nBlockAlign = (mixwfe->Format.wBitsPerSample *
+                mixwfe->Format.nChannels) / 8;
+        mixwfe->Format.nAvgBytesPerSec = mixwfe->Format.nSamplesPerSec *
+                mixwfe->Format.nBlockAlign;
+        mixwfe->Samples.wValidBitsPerSample = mixwfe->Format.wBitsPerSample;
+        mixwfe->Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
 
         if (mixwfe->Format.nChannels > 2) {
             static int once;
@@ -88,7 +109,10 @@ static HRESULT DSOUND_WaveFormat(DirectSoundDevice *device, IAudioClient *client
             mixwfe->dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
         }
 
+#if 0
         if (!IsEqualGUID(&mixwfe->SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)) {
+#endif
+        if ( 1 ) {
             WAVEFORMATEXTENSIBLE testwfe = *mixwfe;
 
             testwfe.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
@@ -96,13 +120,18 @@ static HRESULT DSOUND_WaveFormat(DirectSoundDevice *device, IAudioClient *client
             testwfe.Format.nBlockAlign = testwfe.Format.nChannels * testwfe.Format.wBitsPerSample / 8;
             testwfe.Format.nAvgBytesPerSec = testwfe.Format.nSamplesPerSec * testwfe.Format.nBlockAlign;
 
+#if 0
             if (FAILED(IAudioClient_IsFormatSupported(client, AUDCLNT_SHAREMODE_SHARED, &testwfe.Format, (WAVEFORMATEX**)&retwfe)))
+#endif
+            if ( 1 )
                 w = DSOUND_CopyFormat(&mixwfe->Format);
             else if (retwfe)
                 w = DSOUND_CopyFormat(&retwfe->Format);
             else
                 w = DSOUND_CopyFormat(&testwfe.Format);
+#if 0
             CoTaskMemFree(retwfe);
+#endif
             retwfe = NULL;
         } else
             w = DSOUND_CopyFormat(&mixwfe->Format);
@@ -137,6 +166,7 @@ static HRESULT DSOUND_WaveFormat(DirectSoundDevice *device, IAudioClient *client
     if (!w)
         return DSERR_OUTOFMEMORY;
 
+#if 0
     hr = IAudioClient_IsFormatSupported(client, AUDCLNT_SHAREMODE_SHARED, w, (WAVEFORMATEX**)&retwfe);
     if (retwfe) {
         memcpy(w, retwfe, sizeof(WAVEFORMATEX) + retwfe->Format.cbSize);
@@ -147,14 +177,17 @@ static HRESULT DSOUND_WaveFormat(DirectSoundDevice *device, IAudioClient *client
         HeapFree(GetProcessHeap(), 0, w);
         return hr;
     }
+#endif
     *wfx = w;
     return S_OK;
 }
 
 HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
 {
+#if 0
     UINT prebuf_frames;
     REFERENCE_TIME prebuf_rt;
+#endif
     WAVEFORMATEX *wfx = NULL;
     HRESULT hres;
     REFERENCE_TIME period;
@@ -162,6 +195,7 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
 
     TRACE("(%p, %d)\n", device, forcewave);
 
+#if 0
     if(device->client){
         IAudioClient_Release(device->client);
         device->client = NULL;
@@ -185,16 +219,22 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
         WARN("Activate failed: %08x\n", hres);
         return hres;
     }
+#endif
+
+    device->client = NULL;
 
     hres = DSOUND_WaveFormat(device, device->client, forcewave, &wfx);
     if (FAILED(hres)) {
+#if 0
         IAudioClient_Release(device->client);
         device->client = NULL;
+#endif
         return hres;
     }
     HeapFree(GetProcessHeap(), 0, device->pwfx);
     device->pwfx = wfx;
 
+#if 0
     prebuf_frames = device->prebuf * DSOUND_fraglen(device) / device->pwfx->nBlockAlign;
     prebuf_rt = (10000000 * (UINT64)prebuf_frames) / device->pwfx->nSamplesPerSec;
 
@@ -246,8 +286,12 @@ HRESULT DSOUND_ReopenDevice(DirectSoundDevice *device, BOOL forcewave)
     hres = IAudioClient_Start(device->client);
     if (FAILED(hres))
         WARN("starting failed with %08x\n", hres);
+#endif
 
+#if 0
     hres = IAudioClient_GetStreamLatency(device->client, &period);
+#endif
+    hres = -1;
     if (FAILED(hres)) {
         WARN("GetStreamLatency failed with %08x\n", hres);
         period_ms = 10;
