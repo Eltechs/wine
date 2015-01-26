@@ -947,7 +947,7 @@ HRESULT IDirectSoundBufferImpl_Create(
 
 	/* Allocate system memory for buffer */
 	if ( -1 == (dsb->shmid = shmget(IPC_PRIVATE, sizeof(dsound_shmem_buffer_t) + dsb->buflen, IPC_CREAT|S_IRUSR|S_IWUSR))
-	     || !(dsb->buffer->shmem_buffer_header = shmat(dsb->shmid, NULL, 0)) )
+	     || -1 == (dsb->buffer->shmem_buffer_header = shmat(dsb->shmid, NULL, 0)) )
 	{
 		WARN("out of memory\n");
 		HeapFree(GetProcessHeap(),0,dsb->pwfx);
