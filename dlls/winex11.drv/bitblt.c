@@ -1930,8 +1930,8 @@ static void x11drv_surface_flush( struct window_surface *window_surface )
                           surface->header.rect.top + coords.visrect.top,
                           coords.visrect.right - coords.visrect.left,
                           coords.visrect.bottom - coords.visrect.top, False );
-            XFlush( gdi_display );
-            /*XSync( gdi_display, False );*/
+            /*XFlush( gdi_display );*/
+            XSync( gdi_display, False );
         }
         else
 #endif
