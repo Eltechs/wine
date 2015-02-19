@@ -982,32 +982,13 @@ static BOOLEAN get_dir_case_sensitivity_stat( const char *dir )
     return FALSE;
 
 #elif defined(__linux__)
-    struct statfs stfs;
-    struct stat st;
-    char *cifile;
-
-    /* Only assume CIOPFS is case insensitive. */
-    if (statfs( dir, &stfs ) == -1) return FALSE;
-    if (stfs.f_type != 0x65735546 /* FUSE_SUPER_MAGIC */)
-        return TRUE;
-    /* Normally, we'd have to parse the mtab to find out exactly what
-     * kind of FUSE FS this is. But, someone on wine-devel suggested
-     * a shortcut. We'll stat a special file in the directory. If it's
-     * there, we'll assume it's a CIOPFS, else not.
-     * This will break if somebody puts a file named ".ciopfs" in a non-
-     * CIOPFS directory.
-     */
-    cifile = RtlAllocateHeap( GetProcessHeap(), 0, strlen( dir )+sizeof("/.ciopfs") );
-    if (!cifile) return TRUE;
-    strcpy( cifile, dir );
-    strcat( cifile, "/.ciopfs" );
-    if (stat( cifile, &st ) == 0)
+    if ( getenv("EXADROID_FS_CASE_INSENSITIVE") )
     {
-        RtlFreeHeap( GetProcessHeap(), 0, cifile );
         return FALSE;
+    } else
+    {
+        return TRUE;
     }
-    RtlFreeHeap( GetProcessHeap(), 0, cifile );
-    return TRUE;
 #else
     return TRUE;
 #endif
@@ -2135,6 +2116,9 @@ static NTSTATUS find_file_in_dir( char *unix_name, int pos, const WCHAR *name, i
     str.Buffer = (WCHAR *)name;
     str.Length = length * sizeof(WCHAR);
     str.MaximumLength = str.Length;
+
+    if ( getenv("EXADROID_DISABLE_SHORT_NAMES") && !get_dir_case_sensitivity( unix_name )) goto not_found;
+
     is_name_8_dot_3 = RtlIsNameLegalDOS8Dot3( &str, NULL, &spaces ) && !spaces;
 
     if (!is_name_8_dot_3 && !get_dir_case_sensitivity( unix_name )) goto not_found;
