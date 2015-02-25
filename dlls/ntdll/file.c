@@ -1628,7 +1628,19 @@ static NTSTATUS set_file_times( int fd, const LARGE_INTEGER *mtime, const LARGE_
     FIXME( "setting file times not supported\n" );
     status = STATUS_NOT_IMPLEMENTED;
 #endif
-    return status;
+
+    /**
+     * Only file-owner can change file time. In Exagear game-files are not owned by Exagear.
+     * That's why some apps try to change file time and unexpect failed result.
+     * Here we are lieing that all is ok.
+     */
+    if ( getenv("EXADROID_ENABLE_TRUE_SETFILETIME") )
+    {
+        return status;
+    } else
+    {
+        return STATUS_SUCCESS;
+    }
 }
 
 static inline void get_file_times( const struct stat *st, LARGE_INTEGER *mtime, LARGE_INTEGER *ctime,
