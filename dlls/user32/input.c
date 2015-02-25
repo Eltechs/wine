@@ -291,22 +291,28 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetCursorPos( INT x, INT y )
     BOOL ret;
     INT prev_x, prev_y, new_x, new_y;
 
-    SERVER_START_REQ( set_cursor )
+    if ( !getenv("EXADROID_DISABLE_SET_CURSOR") )
     {
-        req->flags = SET_CURSOR_POS;
-        req->x     = x;
-        req->y     = y;
-        if ((ret = !wine_server_call( req )))
+        SERVER_START_REQ( set_cursor )
         {
-            prev_x = reply->prev_x;
-            prev_y = reply->prev_y;
-            new_x  = reply->new_x;
-            new_y  = reply->new_y;
+            req->flags = SET_CURSOR_POS;
+            req->x     = x;
+            req->y     = y;
+            if ((ret = !wine_server_call( req )))
+            {
+                prev_x = reply->prev_x;
+                prev_y = reply->prev_y;
+                new_x  = reply->new_x;
+                new_y  = reply->new_y;
+            }
         }
+        SERVER_END_REQ;
+        if (ret && (prev_x != new_x || prev_y != new_y)) USER_Driver->pSetCursorPos( new_x, new_y );
+        return ret;
+    } else
+    {
+        return 0;
     }
-    SERVER_END_REQ;
-    if (ret && (prev_x != new_x || prev_y != new_y)) USER_Driver->pSetCursorPos( new_x, new_y );
-    return ret;
 }
 
 
