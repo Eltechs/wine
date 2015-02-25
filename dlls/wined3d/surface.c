@@ -3139,32 +3139,40 @@ HRESULT CDECL wined3d_surface_set_color_key(struct wined3d_surface *surface,
 
     if (flags & WINEDDCKEY_COLORSPACE)
     {
-        FIXME(" colorkey value not supported (%08x) !\n", flags);
+        FIXME(" colorkey value not supported (%08x) %p !\n", flags, surface);
         return WINED3DERR_INVALIDCALL;
     }
 
     /* Dirtify the surface, but only if a key was changed. */
     if (color_key)
     {
+        struct wined3d_color_key ckey = *color_key;
+
+        if ( surface->resource.format->id == WINED3DFMT_B5G6R5_UNORM )
+        {
+            ckey.color_space_low_value &= 0xffff;
+            ckey.color_space_high_value &= 0xffff;
+        }
+
         switch (flags & ~WINEDDCKEY_COLORSPACE)
         {
             case WINEDDCKEY_DESTBLT:
-                surface->dst_blt_color_key = *color_key;
+                surface->dst_blt_color_key = ckey;
                 surface->CKeyFlags |= WINEDDSD_CKDESTBLT;
                 break;
 
             case WINEDDCKEY_DESTOVERLAY:
-                surface->dst_overlay_color_key = *color_key;
+                surface->dst_overlay_color_key = ckey;
                 surface->CKeyFlags |= WINEDDSD_CKDESTOVERLAY;
                 break;
 
             case WINEDDCKEY_SRCOVERLAY:
-                surface->src_overlay_color_key = *color_key;
+                surface->src_overlay_color_key = ckey;
                 surface->CKeyFlags |= WINEDDSD_CKSRCOVERLAY;
                 break;
 
             case WINEDDCKEY_SRCBLT:
-                surface->src_blt_color_key = *color_key;
+                surface->src_blt_color_key = ckey;
                 surface->CKeyFlags |= WINEDDSD_CKSRCBLT;
                 break;
         }
