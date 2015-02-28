@@ -28,8 +28,8 @@ typedef struct
 } dsound_shmem_buffer_t;
 
 /**
- * Команды протокола общения. Элементы перечисления должны быть синхронизированы с константами из
- * com.eltechs.axs.dsoundServer.Opcodes.
+ * Команды протокола общения (посылаются от dsound.dll к серверу). Элементы перечисления должны быть
+ * синхронизированы с константами из com.eltechs.axs.dsoundServer.Opcodes.
  */
 typedef enum
 {
@@ -38,7 +38,19 @@ typedef enum
     ANDROID_OPC_play = 1,
     ANDROID_OPC_stop = 2,
     ANDROID_OPC_set_current_position = 3,
+    ANDROID_OPC_set_notifications = 4,
+
+    ANDROID_OPC_init_global_notifier = 255
 } dsound_android_opc_t;
+
+/**
+ * Команды протокола общения (посылаются от сервера к dsound.dll). Элементы перечисления должны быть
+ * синхронизированы с константами из com.eltechs.axs.dsoundServer.NotifyOpcodes.
+ */
+typedef enum
+{
+    ANDROID_EVENT_OPC_position = 1
+} dsound_android_event_opc_t;
 
 /**
  * Команда Attach
@@ -69,6 +81,16 @@ typedef struct
     int len;
     int position;
 } dsound_android_cmd_set_current_position_t;
+
+/**
+ * Заголовок команды SetNotifications.
+ */
+typedef struct
+{
+    int opc;
+    int len;
+    int count;
+} dsound_android_cmd_set_notifications_t;
 
 /**
  * Тривиальная команда, состоящая из заголовка

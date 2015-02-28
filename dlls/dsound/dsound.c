@@ -878,6 +878,11 @@ HRESULT DirectSoundDevice_Initialize(DirectSoundDevice ** ppDevice, LPCGUID lpcG
     if (hr == DS_OK) {
 //        device->thread = CreateThread(0, 0, DSOUND_mixthread, device, 0, 0);
 //        SetThreadPriority(device->thread, THREAD_PRIORITY_TIME_CRITICAL);
+        if ( DSOUND_notifythread_handle == 0 )
+        {
+            DSOUND_notifythread_handle = CreateThread(0, 0, DSOUND_notifythread, device, 0, 0);
+            SetThreadPriority(DSOUND_notifythread_handle, THREAD_PRIORITY_TIME_CRITICAL);
+        }
     } else
         WARN("DSOUND_PrimaryCreate failed: %08x\n", hr);
 

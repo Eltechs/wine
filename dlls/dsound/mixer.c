@@ -25,6 +25,11 @@
 #include <assert.h>
 #include <stdarg.h>
 #include <math.h>	/* Insomnia - pow() function */
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <arpa/inet.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 #define COBJMACROS
 #define NONAMELESSSTRUCT
@@ -41,6 +46,7 @@
 #include "ksmedia.h"
 #include "dsound_private.h"
 #include "fir.h"
+#include "android.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(dsound);
 
@@ -869,4 +875,80 @@ DWORD CALLBACK DSOUND_mixthread(void *p)
 		RtlReleaseResource(&(dev->buffer_list_lock));
 	}
 	return 0;
+}
+
+HANDLE DSOUND_notifythread_handle = 0;
+
+DWORD CALLBACK DSOUND_notifythread(void *p)
+{
+    DirectSoundDevice *dev = p;
+    struct sockaddr_un addr;
+    int android_socket;
+    const char *path = getenv(ANDROID_DSOUND_SERVER_PORT_ARGUMENT_NAME);
+    const unsigned len = strlen(path);
+    int cmd;
+
+    TRACE("Start notify thread(%p)\n", dev);
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    addr.sun_path[0] = '\0';
+    memcpy(addr.sun_path + 1, path, len);
+
+    android_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+
+    if ( android_socket < 0 )
+    {
+        WARN("Exagear: cannot create AF_UNIX notification socket for dsound!\n");
+    }
+
+    if ( 0 != connect( android_socket, (struct sockaddr *)&addr, sizeof(addr.sun_family) + len + 1) )
+    {
+        WARN("Exagear: cannot connect to AF_UNIX notification socket for dsound!\n");
+    }
+
+    {
+        dsound_android_cmd_trivial_t cmd;
+        cmd.opc = ANDROID_OPC_init_global_notifier;
+        cmd.len = SIZE_OF_RAW_CMD( dsound_android_cmd_trivial_t );
+
+        do
+        {
+            int response;
+            write(android_socket, &cmd, sizeof(cmd));
+
+            if ( sizeof(int) != read(android_socket, &response, sizeof(response)) )
+            {
+                ERR("Can't initialize notification, read failed.\n");
+                return 0;
+            }
+            if ( response != 0 )
+            {
+                ERR("Can't initialize notification, error response.\n");
+                return 0;
+            }
+        } while (0);
+    }
+
+    while( read(android_socket, &cmd, sizeof(cmd)) )
+    {
+        switch ( cmd )
+        {
+          case ANDROID_EVENT_OPC_position:
+            {
+                int handle;
+
+                read(android_socket, &handle, sizeof(handle));
+
+                TRACE("signalled event %d\n", handle);
+
+                SetEvent( (HANDLE)handle );
+            }
+            break;
+          default:
+            ERR("Unknown notify opcode %d.\n", cmd);
+        }
+    }
+
+    return 0;
 }

@@ -28,6 +28,7 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/uio.h>
 
 #define NONAMELESSSTRUCT
 #define NONAMELESSUNION
@@ -94,6 +95,8 @@ static HRESULT WINAPI IDirectSoundNotifyImpl_SetNotificationPositions(IDirectSou
         DWORD howmuch, const DSBPOSITIONNOTIFY *notify)
 {
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundNotify(iface);
+        int response;
+        struct iovec iov[2];
 
 	TRACE("(%p,0x%08x,%p)\n",This,howmuch,notify);
 
@@ -109,24 +112,33 @@ static HRESULT WINAPI IDirectSoundNotifyImpl_SetNotificationPositions(IDirectSou
 		    notify[i].dwOffset,notify[i].hEventNotify);
 	}
 
-	if (howmuch > 0) {
-	    /* Make an internal copy of the caller-supplied array.
-	     * Replace the existing copy if one is already present. */
-            HeapFree(GetProcessHeap(), 0, This->notifies);
-            This->notifies = HeapAlloc(GetProcessHeap(), 0,
-			howmuch * sizeof(DSBPOSITIONNOTIFY));
+        DEFINE_CMD( set_notifications )
+        cmd.len += howmuch*sizeof(DSBPOSITIONNOTIFY);
+        cmd.count = howmuch;
 
-            if (This->notifies == NULL) {
-		    WARN("out of memory\n");
-		    return DSERR_OUTOFMEMORY;
-	    }
-            CopyMemory(This->notifies, notify, howmuch * sizeof(DSBPOSITIONNOTIFY));
-            This->nrofnotifies = howmuch;
-	} else {
-           HeapFree(GetProcessHeap(), 0, This->notifies);
-           This->notifies = NULL;
-           This->nrofnotifies = 0;
+	if (howmuch > 0)
+        {
+            iov[0].iov_base = &cmd;
+            iov[0].iov_len = sizeof(cmd);
+            iov[1].iov_base = notify;
+            iov[1].iov_len = howmuch*sizeof(DSBPOSITIONNOTIFY);
+
+            writev(This->android_socket, iov, 2);
+	} else
+        {
+            write(This->android_socket, &cmd, sizeof(cmd));
 	}
+
+        if ( sizeof(int) != read(This->android_socket, &response, sizeof(response)) )
+        {
+            ERR("SEND_DSOUND_ANDROID_CMD(op = %d) has failed\n", cmd.opc);
+            abort();
+        }
+        if ( response != 0 )
+        {
+            ERR("SEND_DSOUND_ANDROID_CMD(op = %d) has failed\n", cmd.opc);
+            abort();
+        }
 
 	return S_OK;
 }

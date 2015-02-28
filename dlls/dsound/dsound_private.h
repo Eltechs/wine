@@ -235,6 +235,9 @@ void DSOUND_RecalcFormat(IDirectSoundBufferImpl *dsb) DECLSPEC_HIDDEN;
 DWORD DSOUND_secpos_to_bufpos(const IDirectSoundBufferImpl *dsb, DWORD secpos, DWORD secmixpos, float *overshot) DECLSPEC_HIDDEN;
 
 DWORD CALLBACK DSOUND_mixthread(void *ptr) DECLSPEC_HIDDEN;
+DWORD CALLBACK DSOUND_notifythread(void *ptr) DECLSPEC_HIDDEN;
+
+extern HANDLE DSOUND_notifythread_handle DECLSPEC_HIDDEN;
 
 /* sound3d.c */
 
