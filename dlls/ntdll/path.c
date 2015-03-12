@@ -100,6 +100,7 @@ static NTSTATUS find_drive_rootA( LPCSTR *ppath, unsigned int len, int *drive_re
     const char *path = *ppath;
     struct stat st;
     struct drive_info info[MAX_DOS_DRIVES];
+    char* nocheck_path = getenv("EXADROID_DO_NOT_CHECK_ROOT_PATH");
 
     /* get device and inode of all drives */
     if (!DIR_get_drives_info( info )) return STATUS_OBJECT_PATH_NOT_FOUND;
@@ -114,7 +115,12 @@ static NTSTATUS find_drive_rootA( LPCSTR *ppath, unsigned int len, int *drive_re
 
     for (;;)
     {
-        if (!stat( buffer, &st ) && S_ISDIR( st.st_mode ))
+        int drive_allowed = 1;
+        if ( nocheck_path )
+        {
+            drive_allowed = strncmp( nocheck_path, buffer, strlen(nocheck_path) );
+        }
+        if (drive_allowed && !stat( buffer, &st ) && S_ISDIR( st.st_mode ))
         {
             /* Find the drive */
             for (drive = 0; drive < MAX_DOS_DRIVES; drive++)
