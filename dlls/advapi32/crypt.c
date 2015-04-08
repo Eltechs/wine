@@ -2307,23 +2307,23 @@ BOOL WINAPI SystemFunction035(LPCSTR lpszDllFilePath)
 
 BOOLEAN WINAPI SystemFunction036(PVOID pbBuffer, ULONG dwLen)
 {
-    int dev_random;
+    static int init = 0;
+    ULONG i = dwLen;
+    char * cbuf = pbBuffer;
 
-    dev_random = open("/dev/urandom", O_RDONLY);
-    if (dev_random != -1)
+    if ( !init )
     {
-        if (read(dev_random, pbBuffer, dwLen) == (ssize_t)dwLen)
-        {
-            close(dev_random);
-            return TRUE;
-        }
-        close(dev_random);
+        srandom(time(NULL));
+        init = 1;
     }
-    else
-        FIXME("couldn't open /dev/urandom\n");
-    SetLastError(NTE_FAIL);
-    return FALSE;
-}    
+
+    while (i--)
+    {
+        cbuf[i] = (char)random();
+    }
+
+    return TRUE;
+}
     
 /*
    These functions have nearly identical prototypes to CryptProtectMemory and CryptUnprotectMemory,
