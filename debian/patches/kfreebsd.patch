@@ -1,0 +1,13 @@
+description: add missing include for kfreebsd architectures
+author: Michael Gilbert <mgilbert@debian.org>
+
+--- a/dlls/ntdll/directory.c
++++ b/dlls/ntdll/directory.c
+@@ -48,6 +48,7 @@
+ #include <sys/attr.h>
+ #endif
+ #ifdef HAVE_SYS_VNODE_H
++#include <stdint.h>
+ /* Work around a conflict with Solaris' system list defined in sys/list.h. */
+ #define list SYSLIST
+ #define list_next SYSLIST_NEXT

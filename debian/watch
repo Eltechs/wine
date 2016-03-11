@@ -1,0 +1,3 @@
+version=3
+opts="uversionmangle=s/-rc/~rc/,pgpsigurlmangle=s/$/.sign/" \
+ftp://ftp.winehq.org/pub/wine/source/(\d\.*[02468])/wine-(\d\.*[02468].*)\.tar\.bz2

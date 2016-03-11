@@ -1,0 +1,26 @@
+#!/bin/sh -e
+
+name="$(basename $0|sed s/server//)"
+bindir=/usr/lib/$name
+
+wineserver32=$bindir/wineserver32
+wineserver64=$bindir/wineserver64
+
+if test -x "$wineserver64"; then
+    wineserver=$wineserver64
+elif test -x "$wineserver32"; then
+    wineserver=$wineserver32
+else
+    echo "error: unable to find wineserver executable.  this shouldn't happen." >&2
+    exit 1
+fi
+
+dist=$(cat /etc/debian_version)
+arch=$(dpkg --print-architecture)
+version=$($wineserver --version 2>&1 | cut -d- -f2)
+
+echo "Executing $name ($(basename $wineserver)) $version on Debian $dist ($arch)." >&2
+echo "If something goes wrong, please rerun with \"WINEDEBUG=err+all $name\"" >&2
+echo "for more detailed debugging output." >&2
+
+exec $wineserver -p0 "$@"

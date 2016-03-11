@@ -1,0 +1,26 @@
+description: disable gecko/mono external installers
+author: Michael Gilbert <mgilbert@debian.org>
+
+--- a/dlls/mscoree/mscoree_main.c
++++ b/dlls/mscoree/mscoree_main.c
+@@ -760,8 +760,6 @@ static BOOL install_wine_mono(void)
+ 
+ HRESULT WINAPI DllRegisterServer(void)
+ {
+-    install_wine_mono();
+-
+     return __wine_register_resources( MSCOREE_hInstance );
+ }
+ 
+--- a/dlls/mshtml/nsembed.c
++++ b/dlls/mshtml/nsembed.c
+@@ -772,8 +772,7 @@ BOOL load_gecko(void)
+     if(!loading_thread) {
+         loading_thread = GetCurrentThreadId();
+ 
+-        if(load_wine_gecko(gre_path)
+-           || (install_wine_gecko() && load_wine_gecko(gre_path)))
++        if(load_wine_gecko(gre_path))
+             ret = init_xpcom(gre_path);
+         else
+            MESSAGE("Could not load wine-gecko. HTML rendering will be disabled.\n");

@@ -1,0 +1,160 @@
+#!/usr/bin/make -f
+
+DEB_HOST_ARCH=$(shell dpkg-architecture -qDEB_HOST_ARCH)
+DEB_BUILD_ARCH_OS=$(shell dpkg-architecture -qDEB_BUILD_ARCH_OS)
+DEB_BUILD_ARCH_BITS=$(shell dpkg-architecture -qDEB_BUILD_ARCH_BITS)
+
+VERSION=$(shell dpkg-parsechangelog -S Source | sed s/wine//g)
+
+MANDIR=usr/share/man
+DATDIR=usr/share/wine$(VERSION)
+INCDIR=usr/include/wine$(VERSION)
+#LIBDIR=usr/lib/$(shell dpkg-architecture -qDEB_HOST_MULTIARCH)/wine$(VERSION)
+LIBDIR=usr/lib/wine$(VERSION)
+
+NCURSES=$(shell ./debian/scripts/dpkg-depgrep ncurses)
+FREETYPE=$(shell ./debian/scripts/dpkg-depgrep freetype)
+# enable verbose build log
+export DH_VERBOSE=1
+
+# wine doesn't support fortify hardening and fails to build with pie
+export DEB_BUILD_MAINT_OPTIONS=hardening=+all,-pie,-fortify
+
+# linker options
+export DEB_LDFLAGS_MAINT_APPEND+=-Wl,-rpath,/$(LIBDIR)
+
+# configure options
+CONFLAGS=--with-gnutls \
+         --without-hal \
+         --without-v4l \
+         --without-sane \
+         --without-capi \
+         --without-gphoto \
+         --without-gstreamer \
+         --disable-tests \
+         --libdir=/$(LIBDIR) \
+         --bindir=/$(LIBDIR) \
+         --mandir=/$(MANDIR) \
+         --includedir=/$(INCDIR) \
+         --datarootdir=/$(DATDIR) \
+	 --enable-mem2g \
+         $(shell dpkg-buildflags --export=configure) \
+
+# flags specific to kfreebsd
+ifeq ($(DEB_BUILD_ARCH_OS), kfreebsd)
+export DEB_LDFLAGS_MAINT_APPEND+=-lfreebsd-glue
+endif
+
+# enable wine64 on 64-bit architectures
+ifeq ($(DEB_BUILD_ARCH_BITS), 64)
+CONFLAGS+=--enable-win64
+endif
+
+# on armel build for armv5t
+ifeq ($(DEB_HOST_ARCH), armel)
+export DEB_CFLAGS_MAINT_APPEND+=-march=armv5t
+export DEB_LDFLAGS_MAINT_APPEND+=-march=armv5t
+endif
+
+# additional files to generate
+INSTALLS=$(shell ls debian/*VERSION* | sed s/VERSION/$(VERSION)/) \
+         debian/bug-control \
+
+debian/control: debian/control.in
+	sed s/VERSION/$(VERSION)/g < $< > $@
+
+debian/wine$(VERSION)%: debian/wineVERSION%
+	sed s/VERSION/$(VERSION)/g < $< > $@
+
+debian/wine32$(VERSION)%: debian/wine32VERSION%
+	sed s/VERSION/$(VERSION)/g < $< > $@
+
+debian/wine64$(VERSION)%: debian/wine64VERSION%
+	sed s/VERSION/$(VERSION)/g < $< > $@
+
+debian/libwine$(VERSION)%: debian/libwineVERSION%
+	sed s/VERSION/$(VERSION)/g < $< > $@
+
+debian/fonts-wine$(VERSION)%: debian/fonts-wineVERSION%
+	sed s/VERSION/$(VERSION)/g < $< > $@
+
+debian/bug-control: debian/bug-control.in
+	sed s/VERSION/$(VERSION)/g < $< > $@
+
+%:
+	dh $@ --parallel --with autoreconf
+
+override_dh_auto_configure:
+	./debian/scripts/generate libs/wine/cptable.generated cpmap
+	./debian/scripts/generate server/trace.generated make_requests
+	./debian/scripts/generate server/request.generated make_requests
+	./tools/make_fir
+	./tools/make_unicode
+	./tools/make_requests
+	cd dlls/opengl32 && ./make_opengl
+	ln -s /usr/share/misc/config.sub tools || true
+	ln -s /usr/share/misc/config.guess tools || true
+	./configure $(CONFLAGS)
+
+override_dh_auto_build-indep:
+	./tools/makedep tools tools/sfnt2fon libs/port libs/wine fonts
+	make -C libs/port
+	make -C libs/wine
+	make -C tools/sfnt2fon
+	make -C fonts
+	make -C tools wineapploader
+	chmod 755 tools/wineapploader
+
+override_dh_auto_install-indep: $(INSTALLS)
+	mkdir -p debian/tmp
+	cp ANNOUNCE debian/tmp/changelog
+	cp programs/winedbg/README debian/tmp/README.winedbg
+	cp debian/scripts/wine debian/tmp/wine$(VERSION)
+	cp debian/scripts/wineserver debian/tmp/wineserver$(VERSION)
+	for dir in loader server programs/msiexec programs/winedbg \
+	    programs/wineconsole programs/regedit programs/regsvr32 \
+	    programs/wineboot programs/winefile programs/winecfg; do \
+	    ./tools/makedep $$dir; \
+	    make -C $$dir install-man; \
+	    done
+	for file in $$(find . -name \*.man); do \
+	    rename=$$(basename $$file | sed s/\\.man/$(VERSION)\\.1/); \
+	    cp $$file debian/tmp/$$rename || true; \
+	    done
+	rm -f debian/tmp/*UTF-8*
+
+override_dh_auto_install-arch: $(INSTALLS)
+	mkdir -p debian/tmp
+	cp ANNOUNCE debian/tmp/changelog
+	cp loader/wine debian/tmp/wine32 || true
+	cp loader/wine64 debian/tmp/wine64 || true
+	cp tools/winedump/README debian/tmp/README.winedump
+	cp server/wineserver debian/tmp/wineserver$(DEB_BUILD_ARCH_BITS)
+	sed 's|LIBDIR|$(LIBDIR)|g' < debian/scripts/winegcc > \
+	    debian/tmp/winegcc$(DEB_BUILD_ARCH_BITS)$(VERSION)
+	dh_auto_install
+	cp loader/wine.man debian/tmp/usr/share/man/man1/wine32.1
+	cp loader/wine.man debian/tmp/usr/share/man/man1/wine64.1
+	cd debian/tmp/usr/share/man/man1 && \
+	    cp winegcc.1 winegcc$(DEB_BUILD_ARCH_BITS)$(VERSION).1
+	test -f debian/tmp/$(LIBDIR)/wine-preloader || \
+	    cp debian/scripts/wine-preloader debian/tmp/$(LIBDIR)
+
+override_dh_strip:
+	dh_strip -Xwine-pthread -Xwine-kthread --ddeb-migration='libwine$(VERSION)-dbg (<< 1.8-2~)'
+
+override_dh_gencontrol:
+	dh_gencontrol -- \
+	    -Vbuilt:Using="$(shell dpkg-query -f '$${source:Package} (= $${source:Version}), ' -W khronos-api unicode-data)" \
+	    -Vdlopen:Depends="$(NCURSES), $(FREETYPE)" \
+
+override_dh_bugfiles:
+	dh_bugfiles -A
+
+override_dh_clean:
+	dh_clean -- $(INSTALLS)
+	make -f debian/rules debian/control
+
+override_dh_auto_clean:
+	QUILT_PATCHES=debian/patches quilt push -af || true
+	dh_auto_clean

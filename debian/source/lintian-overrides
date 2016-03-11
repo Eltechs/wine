@@ -1,0 +1,4 @@
+# incorrectly flagged
+dep5-copyright-license-name-not-unique
+# contents are purely non-copyrightable data not the full rfc text
+license-problem-non-free-RFC debian/rfc3454.txt

@@ -1,0 +1,11 @@
+wine (1.8.1-1eltechs) xenial; urgency=medium
+
+    Initial release of special wine build with 2g/2g userland/kernel 
+    memory split used for running on ARM devices with ExaGear
+
+ -- Eltechs <info@eltechs.com>  Fri, 11 Mar 2016 01:50:54 +0000
+
+
+Local variables:
+mode: debian-changelog
+End:

@@ -1,0 +1,14 @@
+description: avoid unneeded libGL dependency for glu32
+author: Michael Gilbert <mgilbert@debian.org>
+
+--- a/dlls/glu32/Makefile.in
++++ b/dlls/glu32/Makefile.in
+@@ -1,7 +1,7 @@
+ MODULE    = glu32.dll
+ IMPORTLIB = glu32
+ EXTRAINCL = $(X_CFLAGS)
+-EXTRALIBS = -lGLU $(OPENGL_LIBS) $(X_LIBS) $(X_EXTRA_LIBS)
++EXTRALIBS = -lGLU $(X_LIBS) $(X_EXTRA_LIBS)
+ 
+ C_SRCS = \
+ 	glu.c

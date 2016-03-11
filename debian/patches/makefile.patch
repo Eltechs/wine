@@ -1,0 +1,53 @@
+description: don't append wine to the default path settings
+author: Michael Gilbert <mgilbert@debian.org>
+
+--- a/configure.ac
++++ b/configure.ac
+@@ -675,7 +675,7 @@ AC_CHECK_HEADERS([libprocstat.h],,,
+ 
+ dnl **** Check for working dll ****
+ 
+-AC_SUBST(dlldir,"\${libdir}/wine")
++AC_SUBST(dlldir,"\${libdir}")
+ AC_SUBST(DLLFLAGS,"-D_REENTRANT")
+ AC_SUBST(LDRPATH_INSTALL,"")
+ AC_SUBST(LDRPATH_LOCAL,"")
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -28,8 +28,8 @@ libdir          = @libdir@
+ datarootdir     = @datarootdir@
+ datadir         = @datadir@
+ mandir          = @mandir@
+-fontdir         = ${datadir}/wine/fonts
+-includedir      = @includedir@/wine
++fontdir         = ${datadir}/wine
++includedir      = @includedir@
+ dlldir          = @dlldir@
+ fakedlldir      = ${dlldir}/fakedlls
+ top_srcdir      = @top_srcdir@
+@@ -108,15 +108,6 @@ ALL_TEST_RESOURCES  = @ALL_TEST_RESOURCE
+ all: wine
+ 	@echo "Wine build complete."
+ 
+-# Rules for re-running configure
+-
+-config.status: $(srcdir)/configure
+-	@./config.status --recheck
+-
+-include/config.h: include/stamp-h
+-include/stamp-h: $(srcdir)/include/config.h.in config.status
+-	@./config.status include/config.h include/stamp-h
+-
+ # Rules for cleaning
+ 
+ .PHONY: clean distclean __clean__
+--- a/dlls/rpcrt4/tests/Makefile.in
++++ b/dlls/rpcrt4/tests/Makefile.in
+@@ -4,7 +4,6 @@ EXTRAIDLFLAGS = --prefix-server=s_
+ 
+ C_SRCS = \
+ 	cstub.c \
+-	generated.c \
+ 	ndr_marshall.c \
+ 	rpc.c \
+ 	rpc_async.c \

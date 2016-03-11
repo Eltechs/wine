@@ -1,0 +1,73 @@
+description: generate automatically generated request code 
+author: Michael Gilbert <mgilbert@debian.org>
+
+--- a/tools/make_requests
++++ b/tools/make_requests
+@@ -437,7 +437,7 @@ foreach my $err (sort keys %errors)
+ push @trace_lines, "    { NULL, 0 }\n";
+ push @trace_lines, "};\n";
+ 
+-replace_in_file( "server/trace.c",
++replace_in_file( "server/trace.generated",
+                  "### make_requests begin ###",
+                  "### make_requests end ###",
+                  @trace_lines );
+@@ -464,7 +464,7 @@ foreach my $type (sort keys %formats)
+ push @request_lines, @asserts;
+ push @request_lines, "\n#endif  /* WANT_REQUEST_HANDLERS */\n";
+ 
+-replace_in_file( "server/request.h",
++replace_in_file( "server/request.generated",
+                  "### make_requests begin ###",
+                  "### make_requests end ###",
+                  @request_lines );
+--- a/server/request.h
++++ b/server/request.h
+@@ -102,9 +102,9 @@ static inline void set_reply_data_ptr( v
+     current->reply_data = data;
+ }
+ 
++#include "request.generated"
+ 
+-/* Everything below this line is generated automatically by tools/make_requests */
+-/* ### make_requests begin ### */
++/*
+ 
+ DECL_HANDLER(new_process);
+ DECL_HANDLER(get_new_process_info);
+@@ -2294,9 +2294,8 @@ C_ASSERT( FIELD_OFFSET(struct terminate_
+ C_ASSERT( FIELD_OFFSET(struct terminate_job_request, status) == 16 );
+ C_ASSERT( sizeof(struct terminate_job_request) == 24 );
+ 
+-#endif  /* WANT_REQUEST_HANDLERS */
++#endif
+ 
+-/* ### make_requests end ### */
+-/* Everything above this line is generated automatically by tools/make_requests */
++*/
+ 
+ #endif  /* __WINE_SERVER_REQUEST_H */
+--- a/server/trace.c
++++ b/server/trace.c
+@@ -1144,8 +1144,9 @@ static void dump_varargs_rawinput_device
+ 
+ typedef void (*dump_func)( const void *req );
+ 
+-/* Everything below this line is generated automatically by tools/make_requests */
+-/* ### make_requests begin ### */
++#include "trace.generated"
++
++/*
+ 
+ static void dump_new_process_request( const struct new_process_request *req )
+ {
+@@ -5205,8 +5206,7 @@ static const struct
+     { NULL, 0 }
+ };
+ 
+-/* ### make_requests end ### */
+-/* Everything above this line is generated automatically by tools/make_requests */
++*/
+ 
+ static const char *get_status_name( unsigned int status )
+ {

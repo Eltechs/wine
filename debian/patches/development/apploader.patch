@@ -1,0 +1,44 @@
+description: correctly call suffixed wine launcher in wineapploader
+author: Michael Gilbert <mgilbert@debian.org>
+
+--- a/tools/wineapploader.in
++++ b/tools/wineapploader.in
+@@ -20,33 +20,13 @@
+ #
+ 
+ # determine the app Winelib library name
+-appname=`basename "$0" .exe`.exe
++app=$(basename "$0" .exe)
++name=$(echo $app | cut -d- -f1)
++suffix=$(echo $app | sed s/$name//)
++appname=$name.exe
+ 
+ # first try explicit WINELOADER
+ if [ -x "$WINELOADER" ]; then exec "$WINELOADER" "$appname" "$@"; fi
+ 
+-# then default bin directory
+-if [ -x "@bindir@/wine" ]; then exec "@bindir@/wine" "$appname" "$@"; fi
+-
+-# now try the directory containing $0
+-appdir=""
+-case "$0" in
+-  */*)
+-    # $0 contains a path, use it
+-    appdir=`dirname "$0"`
+-    ;;
+-  *)
+-    # no directory in $0, search in PATH
+-    saved_ifs=$IFS
+-    IFS=:
+-    for d in $PATH
+-    do
+-      IFS=$saved_ifs
+-      if [ -x "$d/$0" ]; then appdir="$d"; break; fi
+-    done
+-    ;;
+-esac
+-if [ -x "$appdir/wine" ]; then exec "$appdir/wine" "$appname" "$@"; fi
+-
+ # finally look in PATH
+-exec wine "$appname" "$@"
++exec wine$suffix "$appname" "$@"

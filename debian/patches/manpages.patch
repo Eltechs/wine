@@ -1,0 +1,14 @@
+description: add Makefile rules for building just the manpages
+author: Michael Gilbert <mgilbert@debian.org>
+
+--- a/tools/makedep.c
++++ b/tools/makedep.c
+@@ -2813,6 +2813,8 @@ static struct strarray output_sources( c
+         output( "\n" );
+     }
+ 
++    output( "install-man:: $(shell echo ${MANPAGES} | sed s/\\\\.in//g)\n" );
++
+     strarray_addall( &uninstall_files, output_install_rules( make, install_rules[INSTALL_LIB],
+                                                              "install-lib", &phony_targets ));
+     strarray_addall( &uninstall_files, output_install_rules( make, install_rules[INSTALL_DEV],

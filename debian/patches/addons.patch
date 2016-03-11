@@ -1,0 +1,24 @@
+description: search /usr/share/wine-<addon> instead of /usr/share/wine/<addon>
+author: Michael Gilbert <mgilbert@debian.org>
+
+--- a/dlls/appwiz.cpl/addons.c
++++ b/dlls/appwiz.cpl/addons.c
+@@ -209,8 +209,6 @@ static enum install_res install_from_uni
+         return INSTALL_FAILED;
+ 
+     memcpy(file_path, dir, len);
+-    if(len && file_path[len-1] != '/' && file_path[len-1] != '\\')
+-        file_path[len++] = '/';
+     if(*subdir) {
+         strcpy(file_path+len, subdir);
+         len += strlen(subdir);
+@@ -308,6 +306,9 @@ static enum install_res install_from_def
+     int len;
+     enum install_res ret;
+ 
++    /* fetch addons only from /usr/share */
++    return install_from_unix_file("/usr/share/wine/", addon->subdir_name, addon->file_name);
++
+     if((data_dir = wine_get_data_dir())) {
+         package_dir = data_dir;
+     }else if((data_dir = wine_get_build_dir())) {
