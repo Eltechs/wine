@@ -1,0 +1,51 @@
+debian/control
+debian/substvars
+
+config.*
+configure
+tools/config.*
+tools/make_makefiles
+include/config.h.in
+programs/cscript/ihost.h
+
+tools/winemaker/*.man
+
+# automatically generated files
+dlls/dsound/fir.h
+dlls/*/tests/generated.c
+
+# automatically generated requests files
+server/trace.generated
+server/request.generated
+include/wine/server_protocol.h
+
+# automatically generated unicode files
+loader/l_intl.nls
+libs/wine/wctype.c
+libs/wine/cptable.generated
+libs/wine/casemap.c
+libs/wine/compose.c
+dlls/dwrite/bracket.c
+dlls/dwrite/linebreak.c
+dlls/dwrite/mirror.c
+dlls/dwrite/scripts.c
+dlls/dwrite/scripts.h
+dlls/usp10/bracket.c
+dlls/usp10/indicsyllable.c
+dlls/usp10/linebreak.c
+dlls/usp10/mirror.c
+dlls/usp10/shaping.c
+dlls/kernel32/nameprep.c
+
+# automatically generated opengl spec files
+include/wine/wgl*
+dlls/opengl32/opengl_ext.c
+dlls/opengl32/opengl_norm.c
+dlls/opengl32/opengl32.spec
+
+# font files
+fonts/*.fon
+fonts/Makefile
+tools/sfnt2fon/sfnt2fon
+tools/sfnt2fon/sfnt2fon.o
+tools/sfnt2fon/Makefile

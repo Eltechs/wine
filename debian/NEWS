@@ -1,0 +1,18 @@
+wine (1.8-2) unstable; urgency=medium
+
+  Wine now uses a shared 64-bit wineprefix per default if wine32 and
+  wine64 are installed. For more information on this please have a look
+  at README.debian.
+
+  * The package wine needs to be installed in any case now.
+  * Existing 32-bit wineprefixes don't get changed and continue to work.
+  * Existing 64-bit wineprefixes in $HOME/.wine64 aren't found
+    automatically anymore if you are running wine from a terminal, while
+    Desktop launchers continue to work. You may rename the prefix to
+    $HOME/.wine and adjust any launcher, or run:
+    $ export WINEPREFIX="$HOME/.wine64"
+  * The wineserver is now in PATH, its old filepath doesn't exist
+    anymore. Any existing WINESERVER configuration must be dropped or
+    adjusted.
+
+ -- Jens Reyer <jre.winesim@gmail.com>  Sun, 10 Jan 2016 00:51:06 +0100

@@ -1,0 +1,95 @@
+description: use system unicode
+author: Michael Gilbert <mgilbert@debian.org>
+
+--- a/tools/make_unicode
++++ b/tools/make_unicode
+@@ -21,11 +21,11 @@
+ 
+ use strict;
+ 
+-# base URLs for www.unicode.org files
++# Locations of unicode files
+ my $MAPPINGS = "http://www.unicode.org/Public/MAPPINGS";
+-my $UNIDATA = "http://www.unicode.org/Public/8.0.0/ucd";
++my $UNIDATA = "/usr/share/unicode";
+ my $REPORTS = "http://www.unicode.org/reports";
+-my $RFCS = "http://www.rfc-editor.org/rfc";
++my $RFCS = "debian";
+ my $VERTICALDATA = "http://www.unicode.org/Public/vertical/revision-11";
+ 
+ # Sort keys file
+@@ -372,15 +372,8 @@ my %joining_forms =
+ sub open_data_file($$)
+ {
+     my ($base, $name) = @_;
+-    (my $dir = "data/$name") =~ s/\/[^\/]+$//;
+     local *FILE;
+-    unless (-f "data/$name")
+-    {
+-        print "Fetching $base/$name...\n";
+-        system "mkdir", "-p", $dir;
+-        !system "wget", "-q", "-O", "data/$name", "$base/$name" or die "cannot fetch $base/$name";
+-    }
+-    open FILE, "<data/$name" or die "cannot open data/$name";
++    open FILE, "<$base/$name" or die "cannot open $base/$name";
+     return *FILE;
+ }
+ 
+@@ -2383,7 +2376,10 @@ sub REPLACE_IN_FILE($@)
+ chdir ".." if -f "./make_unicode";
+ READ_DEFAULTS( $DEFAULTS );
+ DUMP_CASE_MAPPINGS( "libs/wine/casemap.c" );
+-DUMP_SORTKEYS( "libs/wine/collation.c", READ_SORTKEYS_FILE() );
++
++# Skipping: format of allkeys.txt changed?
++# DUMP_SORTKEYS( "libs/wine/collation.c", READ_SORTKEYS_FILE() );
++
+ DUMP_COMPOSE_TABLES( "libs/wine/compose.c" );
+ DUMP_CTYPE_TABLES( "libs/wine/wctype.c" );
+ dump_mirroring( "dlls/usp10/mirror.c" );
+@@ -2396,13 +2392,17 @@ dump_linebreak( "dlls/dwrite/linebreak.c
+ dump_scripts( "dlls/dwrite/scripts" );
+ dump_indic( "dlls/usp10/indicsyllable.c" );
+ dump_intl_nls("loader/l_intl.nls");
+-dump_vertical( "dlls/gdi32/vertical.c" );
+-dump_vertical( "dlls/wineps.drv/vertical.c" );
++
++# Skipping: unicode-data currently has no VerticalOrientation-*.txt file
++# dump_vertical( "dlls/gdi32/vertical.c" );
++# dump_vertical( "dlls/wineps.drv/vertical.c" );
++
+ dump_nameprep( "dlls/kernel32/nameprep.c" );
+ 
+-foreach my $file (@allfiles) { HANDLE_FILE( @{$file} ); }
++# Skipping: unicode-data currently has no MAPPING files
++# foreach my $file (@allfiles) { HANDLE_FILE( @{$file} ); }
+ 
+-output_cptable("libs/wine/cptable.c");
++output_cptable("libs/wine/cptable.generated");
+ 
+ exit 0;
+ 
+--- a/libs/wine/cptable.c
++++ b/libs/wine/cptable.c
+@@ -22,8 +22,9 @@
+ 
+ #include "wine/unicode.h"
+ 
+-/* Everything below this line is generated automatically by cpmap.pl */
+-/* ### cpmap begin ### */
++#include "cptable.generated"
++
++/*
+ extern union cptable cptable_037;
+ extern union cptable cptable_424;
+ extern union cptable cptable_437;
+@@ -172,8 +173,7 @@ static const union cptable * const cptab
+     &cptable_28605,
+     &cptable_28606,
+ };
+-/* ### cpmap end ### */
+-/* Everything above this line is generated automatically by cpmap.pl */
++*/
+ 
+ #define NB_CODEPAGES  (sizeof(cptables)/sizeof(cptables[0]))
+ 

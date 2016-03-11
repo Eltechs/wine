@@ -1,0 +1,39 @@
+#!/bin/sh -e
+# Copyright: 2013-2015 Michael Gilbert <mgilbert@debian.org>
+# License: LGPL-2.1
+
+# check for version argument
+if [ "$#" -lt "1" ]; then
+  echo "usage: $(basename $0) <upstream version number>"
+  exit 1
+fi
+
+# terminate if we're not building from a git tree
+if [ ! -d ".git" ]; then
+  echo "error: importing only supported for git checkouts"
+  exit 1
+fi
+
+# ignore changes to files that will be automatically generated
+git update-index --assume-unchanged configure include/config.h.in
+
+# pull specified tag from upstream repository
+version="$1"
+winehq="git://source.winehq.org/git/wine.git"
+tag="wine-$version"
+git checkout upstream
+git pull --no-edit $winehq tag "$tag" || echo "unable to fetch tag $tag"
+
+# merge upstream into master (favoring "their" changes)
+git checkout master
+git merge --strategy-option=theirs upstream
+
+# format the "New upstream release" message
+tag_time=`git cat-file tag "$tag" | sed -n 's/tagger .*<.*> \([0-9]*\) .*/\1/p'`
+release_date=`LC_ALL=C date -u -d "@$tag_time" +"%b %-d, %Y"`
+
+# create the initial changelog entry
+dch -v "$version-1" "New upstream release $version, released $release_date."
+sed -n 's/^  - \(.*\)/- \1/p' ANNOUNCE | while read line; do
+  dch $line
+done

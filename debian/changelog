@@ -1,0 +1,17 @@
+wine (1.8.1-2eltechs) xenial; urgency=medium
+
+  * Set wine32-preloader as mandatory dependency of wine32 package
+
+ -- Eltechs <rogovandrey@eltechs.com>  Fri, 11 Mar 2016 19:51:44 +0000
+
+wine (1.8.1-1eltechs) xenial; urgency=medium
+
+    Initial release of special wine build with 2g/2g userland/kernel 
+    memory split used for running on ARM devices with ExaGear
+
+ -- Eltechs <rogovandrey@eltechs.com>  Fri, 11 Mar 2016 01:50:54 +0000
+
+
+Local variables:
+mode: debian-changelog
+End:
