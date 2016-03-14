@@ -11,7 +11,6 @@ wine (1.8.1-1eltechs) xenial; urgency=medium
 
  -- Eltechs <rogovandrey@eltechs.com>  Fri, 11 Mar 2016 01:50:54 +0000
 
-
 Local variables:
 mode: debian-changelog
 End:
