@@ -1,3 +1,9 @@
+wine (1.8.1-3eltechs) xenial; urgency=medium
+
+  * Disable opengl support
+
+ -- Eltechs <rogovandrey@eltechs.com>  Mon, 28 Mar 2016 22:44:14 +0300
+
 wine (1.8.1-2eltechs) xenial; urgency=medium
 
   * Set wine32-preloader as mandatory dependency of wine32 package

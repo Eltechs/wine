@@ -32,6 +32,7 @@ CONFLAGS=--with-gnutls \
          --without-gphoto \
          --without-gstreamer \
          --disable-tests \
+         --without-opengl \
          --libdir=/$(LIBDIR) \
          --bindir=/$(LIBDIR) \
          --mandir=/$(MANDIR) \
