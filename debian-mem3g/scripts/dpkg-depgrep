@@ -1,0 +1,24 @@
+#!/usr/bin/perl
+#
+# Copyright (C) 2015 Michael Gilbert <mgilbert@debian.org>
+#
+# License: LGPL-2+
+
+use strict;
+use warnings;
+
+use Dpkg::Deps;
+use Dpkg::Control::Info;
+
+if ($#ARGV < 0) {
+    print "usage: $0 <string>\n";
+} else {
+    my $control = Dpkg::Control::Info->new()->get_source();
+    my $depends = deps_parse($control->{'Build-Depends'});
+    foreach (split /,\s+/,$depends) {
+        if ($_ =~ /$ARGV[0]/) {
+            $_ =~ s/-dev//;
+            print "$_\n";
+        }
+    }
+}

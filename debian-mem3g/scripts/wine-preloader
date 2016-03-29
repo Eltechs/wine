@@ -1,0 +1,4 @@
+#!/bin/sh
+
+echo wine-preloader is not supported on this architecture
+exit 1

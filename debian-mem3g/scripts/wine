@@ -1,0 +1,28 @@
+#!/bin/sh -e
+
+name=$(basename $0)
+bindir=/usr/lib/$name
+
+wine32=$bindir/wine32
+wine64=$bindir/wine64
+
+if test -x $wine32; then
+    wine=$wine32
+elif test -x $wine64; then
+    wine=$wine64
+    if [ "$(dpkg --print-architecture)" = "amd64" -a "$(dpkg --print-foreign-architectures | grep -cx "i386")" -ne 1 ] ||
+       [ "$WINEARCH" = "win32" ]; then
+        echo "it looks like multiarch needs to be enabled.  as root, please" >&2
+        echo "execute \"dpkg --add-architecture i386 && apt-get update &&" >&2
+        echo "apt-get install $(echo $name | sed s/wine/wine32/)\"" >&2
+    fi
+else
+    echo "error: unable to find wine executable.  this shouldn't happen." >&2
+    exit 1
+fi
+
+if test -z "$WINEDEBUG"; then
+    export WINEDEBUG=-all
+fi
+
+exec $wine "$@"

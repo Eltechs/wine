@@ -1,0 +1,14 @@
+description: call wine-development instead of wine from the winegcc shell script
+author: Michael Gilbert <mgilbert@debian.org>
+
+--- a/tools/winegcc/winegcc.c
++++ b/tools/winegcc/winegcc.c
+@@ -131,7 +131,7 @@ static const char* app_loader_template =
+     "fi\n"
+     "\n"
+     "# determine the WINELOADER\n"
+-    "if [ ! -x \"$WINELOADER\" ]; then WINELOADER=\"wine\"; fi\n"
++    "if [ ! -x \"$WINELOADER\" ]; then WINELOADER=\"wine-development\"; fi\n"
+     "\n"
+     "# and try to start the app\n"
+     "exec \"$WINELOADER\" \"$apppath\" \"$@\"\n"

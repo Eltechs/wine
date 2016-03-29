@@ -1,0 +1,3 @@
+#!/bin/sh -e
+
+WINEBUILD=/LIBDIR/winebuild /LIBDIR/winegcc $@

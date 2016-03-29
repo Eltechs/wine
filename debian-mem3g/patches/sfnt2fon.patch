@@ -1,0 +1,36 @@
+description: don't build fonts in the arch:all build
+author: Michael Gilbert <mgilbert@debian.org>
+
+--- a/configure.ac
++++ b/configure.ac
+@@ -3382,7 +3382,6 @@ WINE_CONFIG_TEST(dlls/xmllite/tests)
+ WINE_CONFIG_DLL(xolehlp)
+ WINE_CONFIG_DLL(xpsprint)
+ WINE_CONFIG_DLL(xpssvcs)
+-WINE_CONFIG_MAKEFILE([fonts],,[clean,install-lib])
+ WINE_CONFIG_MAKEFILE([include],,[clean,install-dev])
+ WINE_CONFIG_MAKEFILE([libs/port])
+ WINE_CONFIG_MAKEFILE([libs/wine],,[clean,implib,install-dev,install-lib])
+@@ -3482,7 +3481,6 @@ WINE_CONFIG_PROGRAM(xcopy,,[install,po])
+ WINE_CONFIG_TEST(programs/xcopy/tests)
+ WINE_CONFIG_MAKEFILE([server],,[clean,install-lib])
+ WINE_CONFIG_TOOL(tools,[clean])
+-WINE_CONFIG_TOOL(tools/sfnt2fon,[clean])
+ WINE_CONFIG_TOOL(tools/widl,[clean,install-dev])
+ WINE_CONFIG_TOOL(tools/winebuild,[clean,install-dev])
+ WINE_CONFIG_TOOL(tools/winedump,[clean,install-dev])
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -141,11 +141,10 @@ __builddeps__: __tooldeps__ include
+ dummy:
+ loader: libs/port libs/wine tools
+ server: libs/port libs/wine tools include
+-fonts: tools/sfnt2fon
+ include: tools tools/widl
+ libs/wine tools: libs/port
+ tools/wmc tools/wrc: tools
+-tools/sfnt2fon tools/wmc tools/wrc: libs/wine
++tools/wmc tools/wrc: libs/wine
+ tools/widl tools/wmc tools/wrc: libs/wpp
+ libs/port libs/wine libs/wpp: include/config.h
+ 

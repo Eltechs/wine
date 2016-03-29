@@ -1,0 +1,23 @@
+description: call wine-development instead of wine from desktop launchers
+author: Michael Gilbert <mgilbert@debian.org>
+
+--- a/programs/winemenubuilder/winemenubuilder.c
++++ b/programs/winemenubuilder/winemenubuilder.c
+@@ -1488,7 +1488,7 @@ static BOOL write_desktop_entry(const ch
+ 
+     fprintf(file, "[Desktop Entry]\n");
+     fprintf(file, "Name=%s\n", linkname);
+-    fprintf(file, "Exec=env WINEPREFIX=\"%s\" wine %s %s\n",
++    fprintf(file, "Exec=env WINEPREFIX=\"%s\" wine-development %s %s\n",
+             wine_get_config_dir(), path, args);
+     fprintf(file, "Type=Application\n");
+     fprintf(file, "StartupNotify=true\n");
+@@ -2540,7 +2540,7 @@ static BOOL write_freedesktop_associatio
+         fprintf(desktop, "Type=Application\n");
+         fprintf(desktop, "Name=%s\n", friendlyAppName);
+         fprintf(desktop, "MimeType=%s;\n", mimeType);
+-        fprintf(desktop, "Exec=env WINEPREFIX=\"%s\" wine start /ProgIDOpen %s %%f\n", wine_get_config_dir(), progId);
++        fprintf(desktop, "Exec=env WINEPREFIX=\"%s\" wine-development start /ProgIDOpen %s %%f\n", wine_get_config_dir(), progId);
+         fprintf(desktop, "NoDisplay=true\n");
+         fprintf(desktop, "StartupNotify=true\n");
+         if (openWithIcon)

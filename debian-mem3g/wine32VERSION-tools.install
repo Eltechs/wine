@@ -1,0 +1,9 @@
+debian/tmp/usr/lib/*/wmc
+debian/tmp/usr/lib/*/wrc
+debian/tmp/usr/lib/*/winegcc
+debian/tmp/usr/lib/*/wineg++
+debian/tmp/usr/lib/*/winedump
+debian/tmp/usr/lib/*/winebuild
+debian/tmp/usr/lib/*/winemaker
+
+debian/tmp/winegcc32VERSION usr/bin
