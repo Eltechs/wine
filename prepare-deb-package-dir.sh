@@ -1,10 +1,7 @@
 #!/bin/bash
 
-WINEVERSION=1.8.1
+WINEVERSION=1.8.1-4eltechs
 TOPTOPDIR=$1
-
-
-
 
 function create_build_dir
 {
