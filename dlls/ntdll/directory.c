@@ -1510,6 +1510,32 @@ static char *read_first_dent_name( int which, int fd, off_t second_offs, KERNEL_
     de = (KERNEL_DIRENT64 *)buffer;
     return de->d_ino ? de->d_name : NULL;
 }
+/**
+ * Eltechs
+ *
+ * On Android filesystem:
+ * lseek( fd, v, SEEK_SET) doestn't work properly if fd is a directory.
+ * It always behaves as if 'v' were 0.
+ *
+ * Solution is to fast-fordard directory by getdents64() calls
+ */
+static int kludge_dirfd_fastforward( int fd, LONG64 off)
+{
+    char dummy_buf[8192];
+    int r;
+    lseek( fd, 0, SEEK_SET);
+    KERNEL_DIRENT64 * de = dummy_buf;
+    do
+    {
+        r = getdents64( fd, dummy_buf, sizeof( dummy_buf));
+        if ( r <= 0 )
+        {
+            return -1;
+        }
+    } while ( de->d_off != off );
+
+    return 0;
+}
 
 /***********************************************************************
  *           read_directory_getdents
@@ -1563,7 +1589,7 @@ static int read_directory_getdents( int fd, IO_STATUS_BLOCK *io, void *buffer, U
             second_entry_pos = de->d_off;
             last_dir_id = curdir;
         }
-        lseek( fd, old_pos, SEEK_SET );
+        kludge_dirfd_fastforward( fd, old_pos);
     }
 
     res = getdents64( fd, data, size );
@@ -1609,7 +1635,7 @@ static int read_directory_getdents( int fd, IO_STATUS_BLOCK *io, void *buffer, U
                                                  data, size, &data_buffer_changed );
             if (data_buffer_changed)
             {
-                lseek( fd, next_pos, SEEK_SET );
+                kludge_dirfd_fastforward( fd, next_pos);
                 res = 0;
             }
         }
@@ -1621,13 +1647,13 @@ static int read_directory_getdents( int fd, IO_STATUS_BLOCK *io, void *buffer, U
             last_info = info;
             if (io->u.Status == STATUS_BUFFER_OVERFLOW)
             {
-                lseek( fd, old_pos, SEEK_SET );  /* restore pos to previous entry */
+                kludge_dirfd_fastforward( fd, old_pos);  /* restore pos to previous entry */
                 break;
             }
             /* check if we still have enough space for the largest possible entry */
             if (single_entry || io->Information + max_dir_info_size(class) > length)
             {
-                if (res > 0) lseek( fd, next_pos, SEEK_SET );  /* set pos to next entry */
+                if (res > 0) kludge_dirfd_fastforward( fd, next_pos);  /* set pos to next entry */
                 break;
             }
         }
