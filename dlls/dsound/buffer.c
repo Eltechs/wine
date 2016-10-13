@@ -23,6 +23,15 @@
 
 #define COBJMACROS
 
+#include <arpa/inet.h>
+
+#include <unistd.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/un.h>
+#include <sys/stat.h>
+#include <netinet/in.h>
+#include <errno.h>
 #include "windef.h"
 #include "winbase.h"
 #include "winuser.h"
@@ -33,6 +42,7 @@
 #include "dsound.h"
 #include "dsound_private.h"
 #include "dsconf.h"
+#include "android.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(dsound);
 
@@ -106,6 +116,8 @@ static HRESULT WINAPI IDirectSoundNotifyImpl_SetNotificationPositions(IDirectSou
         DWORD howmuch, const DSBPOSITIONNOTIFY *notify)
 {
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundNotify(iface);
+    int response;
+    struct iovec iov[2];
 
 	TRACE("(%p,0x%08x,%p)\n",This,howmuch,notify);
 
@@ -121,25 +133,33 @@ static HRESULT WINAPI IDirectSoundNotifyImpl_SetNotificationPositions(IDirectSou
 		    notify[i].dwOffset,notify[i].hEventNotify);
 	}
 
-	if (howmuch > 0) {
-	    /* Make an internal copy of the caller-supplied array.
-	     * Replace the existing copy if one is already present. */
-            HeapFree(GetProcessHeap(), 0, This->notifies);
-            This->notifies = HeapAlloc(GetProcessHeap(), 0,
-			howmuch * sizeof(DSBPOSITIONNOTIFY));
+    DEFINE_CMD( set_notifications )
+    cmd.len += howmuch*sizeof(DSBPOSITIONNOTIFY);
+    cmd.count = howmuch;
 
-            if (This->notifies == NULL) {
-		    WARN("out of memory\n");
-		    return DSERR_OUTOFMEMORY;
-	    }
-            CopyMemory(This->notifies, notify, howmuch * sizeof(DSBPOSITIONNOTIFY));
-            This->nrofnotifies = howmuch;
-            qsort(This->notifies, howmuch, sizeof(DSBPOSITIONNOTIFY), notify_compar);
-	} else {
-           HeapFree(GetProcessHeap(), 0, This->notifies);
-           This->notifies = NULL;
-           This->nrofnotifies = 0;
-	}
+    if (howmuch > 0)
+    {
+        iov[0].iov_base = &cmd;
+        iov[0].iov_len = sizeof(cmd);
+        iov[1].iov_base = notify;
+        iov[1].iov_len = howmuch*sizeof(DSBPOSITIONNOTIFY);
+
+        writev(This->android_socket, iov, 2);
+    } else
+    {
+        write(This->android_socket, &cmd, sizeof(cmd));
+    }
+
+    if ( sizeof(int) != read(This->android_socket, &response, sizeof(response)) )
+    {
+        ERR("SEND_DSOUND_ANDROID_CMD(op = %d) has failed\n", cmd.opc);
+        abort();
+    }
+    if ( response != 0 )
+    {
+        ERR("SEND_DSOUND_ANDROID_CMD(op = %d) has failed\n", cmd.opc);
+        abort();
+    }
 
 	return S_OK;
 }
@@ -289,9 +309,10 @@ static HRESULT WINAPI IDirectSoundBufferImpl_SetFrequency(IDirectSoundBuffer8 *i
 static HRESULT WINAPI IDirectSoundBufferImpl_Play(IDirectSoundBuffer8 *iface, DWORD reserved1,
         DWORD reserved2, DWORD flags)
 {
-        IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer8(iface);
+    IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer8(iface);
 	HRESULT hres = DS_OK;
 	int i;
+    DEFINE_CMD( play )
 
 	TRACE("(%p,%08x,%08x,%08x)\n",This,reserved1,reserved2,flags);
 
@@ -299,15 +320,16 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Play(IDirectSoundBuffer8 *iface, DW
 	RtlAcquireResourceExclusive(&This->lock, TRUE);
 
 	This->playflags = flags;
-	if (This->state == STATE_STOPPED) {
-		This->leadin = TRUE;
-		This->state = STATE_STARTING;
-	} else if (This->state == STATE_STOPPING)
-		This->state = STATE_PLAYING;
+    This->buffer->shmem_buffer_header->is_playing = 1;
+    cmd.flags = flags;
 
 	for (i = 0; i < This->num_filters; i++) {
 		IMediaObject_Discontinuity(This->filters[i].obj, 0);
 	}
+
+
+    SEND_DSOUND_ANDROID_CMD();
+
 
 	RtlReleaseResource(&This->lock);
 	/* **** */
@@ -317,21 +339,18 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Play(IDirectSoundBuffer8 *iface, DW
 
 static HRESULT WINAPI IDirectSoundBufferImpl_Stop(IDirectSoundBuffer8 *iface)
 {
-        IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer8(iface);
+    IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer8(iface);
 	HRESULT hres = DS_OK;
 
-	TRACE("(%p)\n",This);
+
+    DEFINE_CMD( stop )
+    TRACE("(%p)\n",This);
 
 	/* **** */
 	RtlAcquireResourceExclusive(&This->lock, TRUE);
 
-	if (This->state == STATE_PLAYING)
-		This->state = STATE_STOPPING;
-	else if (This->state == STATE_STARTING)
-	{
-		This->state = STATE_STOPPED;
-		DSOUND_CheckEvent(This, 0, 0);
-	}
+    This->buffer->shmem_buffer_header->is_playing = 0;
+    SEND_DSOUND_ANDROID_CMD();
 
 	RtlReleaseResource(&This->lock);
 	/* **** */
@@ -378,37 +397,38 @@ static HRESULT WINAPI IDirectSoundBufferImpl_GetCurrentPosition(IDirectSoundBuff
         DWORD *playpos, DWORD *writepos)
 {
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer8(iface);
-	DWORD pos;
+    DWORD pos;
 
-	TRACE("(%p,%p,%p)\n",This,playpos,writepos);
+    TRACE("(%p,%p,%p)\n",This,playpos,writepos);
 
-	RtlAcquireResourceShared(&This->lock, TRUE);
+    RtlAcquireResourceShared(&This->lock, TRUE);
 
-	pos = This->sec_mixpos;
+    __sync_synchronize();
+    pos = This->buffer->shmem_buffer_header->current_pos;
 
-	/* sanity */
-	if (pos >= This->buflen){
-		FIXME("Bad play position. playpos: %d, buflen: %d\n", pos, This->buflen);
-		pos %= This->buflen;
-	}
+    /* sanity */
+    if (pos >= This->buflen){
+    //		FIXME("Bad play position. playpos: %d, buflen: %d\n", pos, This->buflen);
+        pos %= This->buflen;
+    }
 
-	if (playpos)
-		*playpos = pos;
-	if (writepos)
-		*writepos = pos;
+    if (playpos)
+        *playpos = pos;
+    if (writepos)
+        *writepos = pos;
 
-	if (writepos && This->state != STATE_STOPPED) {
-		/* apply the documented 10ms lead to writepos */
-		*writepos += This->writelead;
-		*writepos %= This->buflen;
-	}
+    if (writepos && (This->buffer->shmem_buffer_header->is_playing != 0)) {
+        /* apply the documented 10ms lead to writepos */
+        *writepos += This->writelead;
+        *writepos %= This->buflen;
+    }
 
-	RtlReleaseResource(&This->lock);
+    RtlReleaseResource(&This->lock);
 
-	TRACE("playpos = %d, writepos = %d, buflen=%d (%p, time=%d)\n",
-		playpos?*playpos:-1, writepos?*writepos:-1, This->buflen, This, GetTickCount());
+    TRACE("playpos = %d, writepos = %d, buflen=%d (%p, time=%d)\n",
+        playpos?*playpos:-1, writepos?*writepos:-1, This->buflen, This, GetTickCount());
 
-	return DS_OK;
+    return DS_OK;
 }
 
 static HRESULT WINAPI IDirectSoundBufferImpl_GetStatus(IDirectSoundBuffer8 *iface, DWORD *status)
@@ -514,8 +534,8 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Lock(IDirectSoundBuffer8 *iface, DW
 
 	if (writecursor+writebytes <= This->buflen) {
 		*(LPBYTE*)lplpaudioptr1 = This->buffer->memory+writecursor;
-		if (This->sec_mixpos >= writecursor && This->sec_mixpos < writecursor + writebytes && This->state == STATE_PLAYING)
-			WARN("Overwriting mixing position, case 1\n");
+//        if (This->sec_mixpos >= writecursor && This->sec_mixpos < writecursor + writebytes && This->state == STATE_PLAYING)
+//            WARN("Overwriting mixing position, case 1\n");
 		*audiobytes1 = writebytes;
 		if (lplpaudioptr2)
 			*(LPBYTE*)lplpaudioptr2 = NULL;
@@ -526,20 +546,20 @@ static HRESULT WINAPI IDirectSoundBufferImpl_Lock(IDirectSoundBuffer8 *iface, DW
 		TRACE("->%d.0\n",writebytes);
 		This->buffer->lockedbytes += writebytes;
 	} else {
-		DWORD remainder = writebytes + writecursor - This->buflen;
+//		DWORD remainder = writebytes + writecursor - This->buflen;
 		*(LPBYTE*)lplpaudioptr1 = This->buffer->memory+writecursor;
 		*audiobytes1 = This->buflen-writecursor;
 		This->buffer->lockedbytes += *audiobytes1;
-		if (This->sec_mixpos >= writecursor && This->sec_mixpos < writecursor + writebytes && This->state == STATE_PLAYING)
-			WARN("Overwriting mixing position, case 2\n");
+//		if (This->sec_mixpos >= writecursor && This->sec_mixpos < writecursor + writebytes && This->state == STATE_PLAYING)
+//			WARN("Overwriting mixing position, case 2\n");
 		if (lplpaudioptr2)
 			*(LPBYTE*)lplpaudioptr2 = This->buffer->memory;
 		if (audiobytes2) {
 			*audiobytes2 = writebytes-(This->buflen-writecursor);
 			This->buffer->lockedbytes += *audiobytes2;
 		}
-		if (audiobytes2 && This->sec_mixpos < remainder && This->state == STATE_PLAYING)
-			WARN("Overwriting mixing position, case 3\n");
+//		if (audiobytes2 && This->sec_mixpos < remainder && This->state == STATE_PLAYING)
+//			WARN("Overwriting mixing position, case 3\n");
 		TRACE("Locked %p(%i bytes) and %p(%i bytes) writecursor=%d\n", *(LPBYTE*)lplpaudioptr1, *audiobytes1, lplpaudioptr2 ? *(LPBYTE*)lplpaudioptr2 : NULL, audiobytes2 ? *audiobytes2: 0, writecursor);
 	}
 
@@ -554,6 +574,8 @@ static HRESULT WINAPI IDirectSoundBufferImpl_SetCurrentPosition(IDirectSoundBuff
 {
         IDirectSoundBufferImpl *This = impl_from_IDirectSoundBuffer8(iface);
 	HRESULT hres = DS_OK;
+    DEFINE_CMD( set_current_position )
+
 
 	TRACE("(%p,%d)\n",This,newpos);
 
@@ -564,6 +586,10 @@ static HRESULT WINAPI IDirectSoundBufferImpl_SetCurrentPosition(IDirectSoundBuff
 	newpos %= This->buflen;
 	newpos -= newpos%This->pwfx->nBlockAlign;
 	This->sec_mixpos = newpos;
+
+    cmd.position = newpos;
+    SEND_DSOUND_ANDROID_CMD();
+
 
 	/* at this point, do not attempt to reset buffers, mess with primary mix position,
            or anything like that to reduce latency. The data already prebuffered cannot be changed */
@@ -983,20 +1009,67 @@ static const IDirectSoundBuffer8Vtbl dsbvt =
 	IDirectSoundBufferImpl_GetObjectInPath
 };
 
+static HRESULT check_bufferdesc(LPCDSBUFFERDESC dsbd)
+{
+   DWORD bytes_per_sample;
+
+   LPWAVEFORMATEX wfex = dsbd->lpwfxFormat;
+
+   if (dsbd->dwBufferBytes < DSBSIZE_MIN || dsbd->dwBufferBytes > DSBSIZE_MAX) {
+           WARN("invalid parameter: dsbd->dwBufferBytes = %d\n", dsbd->dwBufferBytes);
+           return DSERR_INVALIDPARAM; /* FIXME: which error? */
+   }
+
+   if (wfex->wFormatTag != WAVE_FORMAT_PCM) {
+           WARN("dsdb->wfex->wFormatTag other than WAVE_FORMAT_PCM is not supported\n");
+           return DSERR_UNSUPPORTED;
+   }
+
+   if ( 0 != (wfex->wBitsPerSample % 8) )
+           return DSERR_INVALIDPARAM;
+
+   if ( (wfex->wBitsPerSample != 8) && (wfex->wBitsPerSample != 16) ) {
+           WARN("unsupported wBitsPerSample %d\n", wfex->wBitsPerSample);
+           return DSERR_UNSUPPORTED;
+   }
+   if ( (wfex->nChannels != 1) && (wfex->nChannels != 2) ) {
+           WARN("unsupported nChannels %d\n", wfex->nChannels);
+           return DSERR_UNSUPPORTED;
+   }
+
+   bytes_per_sample = wfex->nChannels * (wfex->wBitsPerSample / 8);
+   if ( 0 != (dsbd->dwBufferBytes % bytes_per_sample) ) {
+           WARN("dsbd->dwBufferBytes is not a multiple of the sample size (%d and %d)\n",
+                dsbd->dwBufferBytes, bytes_per_sample);
+           return DSERR_INVALIDPARAM;
+   }
+
+   return DS_OK;
+}
+
+
 HRESULT secondarybuffer_create(DirectSoundDevice *device, const DSBUFFERDESC *dsbd,
         IDirectSoundBuffer **buffer)
 {
-	IDirectSoundBufferImpl *dsb;
+    const char *path = getenv(ANDROID_DSOUND_SERVER_PORT_ARGUMENT_NAME);
+    const unsigned len = strlen(path);
+
+    int yes = 1;
+
+    IDirectSoundBufferImpl *dsb;
 	LPWAVEFORMATEX wfex = dsbd->lpwfxFormat;
-	HRESULT err = DS_OK;
+    HRESULT err;
 	DWORD capf = 0;
 
-        TRACE("(%p,%p,%p)\n", device, dsbd, buffer);
+    DEFINE_CMD( attach )
 
-	if (dsbd->dwBufferBytes < DSBSIZE_MIN || dsbd->dwBufferBytes > DSBSIZE_MAX) {
-		WARN("invalid parameter: dsbd->dwBufferBytes = %d\n", dsbd->dwBufferBytes);
-		return DSERR_INVALIDPARAM; /* FIXME: which error? */
-	}
+    TRACE("(%p,%p,%p)\n", device, dsbd, buffer);
+
+    if ( DS_OK != (err = check_bufferdesc(dsbd)) ) {
+        *buffer = NULL;
+        return err;
+    }
+
 
 	dsb = HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(*dsb));
 
@@ -1052,12 +1125,15 @@ HRESULT secondarybuffer_create(DirectSoundDevice *device, const DSBUFFERDESC *ds
 	}
 
 	/* Allocate system memory for buffer */
-	dsb->buffer->memory = HeapAlloc(GetProcessHeap(),0,dsb->buflen);
-        if (!dsb->buffer->memory) {
-		WARN("out of memory\n");
-                IDirectSoundBuffer8_Release(&dsb->IDirectSoundBuffer8_iface);
-		return DSERR_OUTOFMEMORY;
+
+    if ( -1 == (dsb->shmid = shmget(IPC_PRIVATE, sizeof(dsound_shmem_buffer_t) + dsb->buflen, IPC_CREAT|S_IRUSR|S_IWUSR))
+            || !(dsb->buffer->shmem_buffer_header = shmat(dsb->shmid, NULL, 0)) )
+    {
+        WARN("out of memory\n");
+        IDirectSoundBuffer8_Release(&dsb->IDirectSoundBuffer8_iface);
+        return DSERR_OUTOFMEMORY;
 	}
+    dsb->buffer->memory = (LPBYTE)dsb->buffer->shmem_buffer_header->data;
 
 	dsb->buffer->ref = 1;
 	dsb->buffer->lockedbytes = 0;
@@ -1077,6 +1153,40 @@ HRESULT secondarybuffer_create(DirectSoundDevice *device, const DSBUFFERDESC *ds
 
 	/* calculate fragment size and write lead */
 	DSOUND_RecalcFormat(dsb);
+
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    addr.sun_path[0] = '\0';
+    memcpy(addr.sun_path + 1, path, len);
+
+    dsb->android_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+
+    if ( dsb->android_socket < 0 )
+    {
+        WARN("Exagear: cannot create AF_UNIX socket for dsound! (%s)\n", path);
+    }
+
+    if ( 0 != connect( dsb->android_socket, (struct sockaddr *)&addr, sizeof(addr.sun_family) + len + 1))
+    {
+        WARN("Exagear: cannot connect to AF_UNIX socket for dsound! (%s) errno == %d\n", path, errno);
+    }
+
+    TRACE("Exagear: successfully connected to DSOUND server socket (%s)\n", path);
+
+    dsb->buffer->shmem_buffer_header->magic = DSOUND_ANDROID_SHMEM_BUFFER_MAGIC;
+    dsb->buffer->shmem_buffer_header->n_channels = dsb->pwfx->nChannels;
+    dsb->buffer->shmem_buffer_header->bits_per_sample = dsb->pwfx->wBitsPerSample;
+    dsb->buffer->shmem_buffer_header->sample_rate = dsb->pwfx->nSamplesPerSec;
+    dsb->buffer->shmem_buffer_header->n_samples = dsbd->dwBufferBytes /
+       (dsbd->lpwfxFormat->nChannels * (dsbd->lpwfxFormat->wBitsPerSample / 8));
+
+   {
+           IDirectSoundBufferImpl *This = dsb;
+           cmd.shmid = dsb->shmid;
+           SEND_DSOUND_ANDROID_CMD();
+   }
+
 
 	if (dsb->dsbd.dwFlags & DSBCAPS_CTRL3D) {
 		dsb->ds3db_ds3db.dwSize = sizeof(DS3DBUFFER);
@@ -1129,7 +1239,9 @@ void secondarybuffer_destroy(IDirectSoundBufferImpl *This)
     This->buffer->ref--;
     list_remove(&This->entry);
     if (This->buffer->ref == 0) {
-        HeapFree(GetProcessHeap(), 0, This->buffer->memory);
+        close(This->android_socket);
+        shmdt(This->buffer->shmem_buffer_header);
+        shmctl(This->shmid, IPC_RMID, 0);
         HeapFree(GetProcessHeap(), 0, This->buffer);
     }
 

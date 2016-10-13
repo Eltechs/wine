@@ -29,7 +29,8 @@
 #include "mediaobj.h"
 #include "mmsystem.h"
 #include "uuids.h"
-
+#include "android.h"
+#include <sys/time.h>
 #include "wine/list.h"
 
 #define DS_MAX_CHANNELS 6
@@ -113,6 +114,7 @@ struct DirectSoundDevice
 typedef struct BufferMemory
 {
     LONG                        ref;
+    dsound_shmem_buffer_t       *shmem_buffer_header;
     LONG                        lockedbytes;
     LPBYTE                      memory;
     struct list buffers;
@@ -144,6 +146,8 @@ struct IDirectSoundBufferImpl
     DWORD                       writelead,buflen;
     DWORD                       nAvgBytesPerSec;
     DWORD                       freq;
+    DWORD                       android_socket;
+    DWORD                       shmid;
     DSVOLUMEPAN                 volpan;
     DSBUFFERDESC                dsbd;
     /* used for frequency conversion (PerfectPitch) */
@@ -229,6 +233,8 @@ void DSOUND_RecalcFormat(IDirectSoundBufferImpl *dsb) DECLSPEC_HIDDEN;
 DWORD DSOUND_secpos_to_bufpos(const IDirectSoundBufferImpl *dsb, DWORD secpos, DWORD secmixpos, float *overshot) DECLSPEC_HIDDEN;
 
 DWORD CALLBACK DSOUND_mixthread(void *ptr) DECLSPEC_HIDDEN;
+DWORD CALLBACK DSOUND_notifythread(void *ptr) DECLSPEC_HIDDEN;
+extern HANDLE DSOUND_notifythread_handle DECLSPEC_HIDDEN;
 
 /* sound3d.c */
 
