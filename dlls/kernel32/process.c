@@ -2327,7 +2327,35 @@ static BOOL create_process_impl( LPCWSTR app_name, LPWSTR cmd_line, LPSECURITY_A
     if (!(tidy_cmdline = get_file_name( app_name, cmd_line, name, sizeof(name)/sizeof(WCHAR),
                                         &hFile, &binary_info )))
         return FALSE;
+
     if (hFile == INVALID_HANDLE_VALUE) goto done;
+
+    /* CROSSOVER HACK: bug 13322 (winehq bug 39403)
+     * Insert --no-sandbox in command line of Steam's web helper process to
+     * work around problems hooking our ntdll exports. */
+    {
+        static const WCHAR steamwebhelperexeW[] = {'s','t','e','a','m','w','e','b','h','e','l','p','e','r','.','e','x','e',0};
+        static const WCHAR nosandboxW[] = {' ','-','-','n','o','-','s','a','n','d','b','o','x',0};
+
+        if (strstrW(name, steamwebhelperexeW))
+        {
+            LPWSTR new_command_line;
+
+            new_command_line = HeapAlloc(GetProcessHeap(), 0,
+                sizeof(WCHAR) * (strlenW(tidy_cmdline) + strlenW(nosandboxW) + 1));
+
+            if (!new_command_line) return FALSE;
+
+            strcpyW(new_command_line, tidy_cmdline);
+            strcatW(new_command_line, nosandboxW);
+
+            TRACE("CrossOver hack changing command line to %s\n", debugstr_w(new_command_line));
+
+            if (tidy_cmdline != cmd_line) HeapFree( GetProcessHeap(), 0, tidy_cmdline );
+            tidy_cmdline = new_command_line;
+        }
+    }
+    /* end CROSSOVER HACK */
 
     /* Warn if unsupported features are used */
 
