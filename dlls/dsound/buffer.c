@@ -1156,9 +1156,8 @@ HRESULT secondarybuffer_create(DirectSoundDevice *device, const DSBUFFERDESC *ds
 
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    addr.sun_path[0] = '\0';
-    memcpy(addr.sun_path + 1, path, len);
+    addr.sun_family = AF_UNIX;    
+    memcpy(addr.sun_path, path, len);
 
     dsb->android_socket = socket(AF_UNIX, SOCK_STREAM, 0);
 
@@ -1167,7 +1166,7 @@ HRESULT secondarybuffer_create(DirectSoundDevice *device, const DSBUFFERDESC *ds
         WARN("Exagear: cannot create AF_UNIX socket for dsound! (%s)\n", path);
     }
 
-    if ( 0 != connect( dsb->android_socket, (struct sockaddr *)&addr, sizeof(addr.sun_family) + len + 1))
+    if ( 0 != connect( dsb->android_socket, (struct sockaddr *)&addr, sizeof(addr.sun_family) + len))
     {
         WARN("Exagear: cannot connect to AF_UNIX socket for dsound! (%s) errno == %d\n", path, errno);
     }

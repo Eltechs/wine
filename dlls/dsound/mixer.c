@@ -808,8 +808,7 @@ DWORD CALLBACK DSOUND_notifythread(void *p)
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    addr.sun_path[0] = '\0';
-    memcpy(addr.sun_path + 1, path, len);
+    memcpy(addr.sun_path, path, len);
 
     android_socket = socket(AF_UNIX, SOCK_STREAM, 0);
 
@@ -818,7 +817,7 @@ DWORD CALLBACK DSOUND_notifythread(void *p)
         WARN("Exagear: cannot create AF_UNIX notification socket for dsound!\n");
     }
 
-    if ( 0 != connect( android_socket, (struct sockaddr *)&addr, sizeof(addr.sun_family) + len + 1) /*sizeof( addr)*/ )
+    if ( 0 != connect( android_socket, (struct sockaddr *)&addr, sizeof(addr.sun_family) + len) /*sizeof( addr)*/ )
     {
         WARN("Exagear: cannot connect to AF_UNIX notification socket for dsound!\n");
     }
