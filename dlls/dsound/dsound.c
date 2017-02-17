@@ -124,8 +124,7 @@ static void _dump_DSBCAPS(DWORD xmask) {
 static HRESULT DirectSoundDevice_Create(DirectSoundDevice ** ppDevice)
 {
     DirectSoundDevice * device;
-    TRACE("(%p)\n", ppDevice);
-
+    TRACE("(%p)\n", ppDevice);    
     /* Allocate memory */
     device = HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(DirectSoundDevice));
     if (device == NULL) {
@@ -333,7 +332,7 @@ static HRESULT DirectSoundDevice_Initialize(DirectSoundDevice ** ppDevice, LPCGU
     }
 
     ZeroMemory(&device->drvcaps, sizeof(device->drvcaps));
-
+#if 0
     if(DSOUND_check_supported(device->client, 11025, 8, 1) ||
             DSOUND_check_supported(device->client, 22050, 8, 1) ||
             DSOUND_check_supported(device->client, 44100, 8, 1) ||
@@ -361,7 +360,8 @@ static HRESULT DirectSoundDevice_Initialize(DirectSoundDevice ** ppDevice, LPCGU
             DSOUND_check_supported(device->client, 48000, 16, 2) ||
             DSOUND_check_supported(device->client, 96000, 16, 2))
         device->drvcaps.dwFlags |= DSCAPS_PRIMARY16BIT | DSCAPS_PRIMARYSTEREO;
-
+#endif
+    device->drvcaps.dwFlags |= DSCAPS_PRIMARY16BIT | DSCAPS_PRIMARYMONO | DSCAPS_PRIMARYSTEREO;
     /* the dsound mixer supports all of the following */
     device->drvcaps.dwFlags |= DSCAPS_SECONDARY8BIT | DSCAPS_SECONDARY16BIT;
     device->drvcaps.dwFlags |= DSCAPS_SECONDARYMONO | DSCAPS_SECONDARYSTEREO;
@@ -383,8 +383,15 @@ static HRESULT DirectSoundDevice_Initialize(DirectSoundDevice ** ppDevice, LPCGU
     ZeroMemory(&device->volpan, sizeof(device->volpan));
 
     device->thread_finished = CreateEventW(0, 0, 0, 0);
-    device->thread = CreateThread(0, 0, DSOUND_mixthread, device, 0, 0);
-    SetThreadPriority(device->thread, THREAD_PRIORITY_TIME_CRITICAL);
+//    device->thread = CreateThread(0, 0, DSOUND_mixthread, device, 0, 0);
+//    SetThreadPriority(device->thread, THREAD_PRIORITY_TIME_CRITICAL);
+    if ( DSOUND_notifythread_handle == 0 )
+    {
+        DSOUND_notifythread_handle = CreateThread(0, 0, DSOUND_notifythread, device, 0, 0);
+        SetThreadPriority(DSOUND_notifythread_handle, THREAD_PRIORITY_TIME_CRITICAL);
+    }
+    device->thread = 0;
+
 
     *ppDevice = device;
     list_add_tail(&DSOUND_renderers, &device->entry);
@@ -930,6 +937,7 @@ static HRESULT WINAPI IDirectSound8Impl_SetSpeakerConfig(IDirectSound8 *iface, D
 static HRESULT WINAPI IDirectSound8Impl_Initialize(IDirectSound8 *iface, const GUID *lpcGuid)
 {
     IDirectSoundImpl *This = impl_from_IDirectSound8(iface);
+//    fprintf( stderr, "KUDAHT\n");
     TRACE("(%p, %s)\n", This, debugstr_guid(lpcGuid));
     return DirectSoundDevice_Initialize(&This->device, lpcGuid);
 }
